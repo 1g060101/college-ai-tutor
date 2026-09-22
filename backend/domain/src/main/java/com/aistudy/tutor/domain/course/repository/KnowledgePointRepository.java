@@ -13,4 +13,7 @@ public interface KnowledgePointRepository {
     List<KnowledgePoint> findAllActive();
 
     Optional<KnowledgePoint> findById(Long id);
+
+    /** 保存知识点（教师知识库维护使用） */
+    KnowledgePoint save(KnowledgePoint knowledgePoint);
 }

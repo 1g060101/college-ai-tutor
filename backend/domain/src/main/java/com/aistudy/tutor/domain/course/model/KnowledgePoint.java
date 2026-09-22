@@ -53,6 +53,19 @@ public class KnowledgePoint {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /** 知识库维护录入用构造器（deleted 默认 false，parentId 为空） */
+    public KnowledgePoint(Long courseId, String name, String tags, int difficulty,
+                          BigDecimal weight, String description) {
+        this.courseId = courseId;
+        this.name = name;
+        this.tags = tags;
+        this.difficulty = difficulty;
+        this.weight = weight;
+        this.description = description;
+        this.sortOrder = 0;
+        this.deleted = false;
+    }
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

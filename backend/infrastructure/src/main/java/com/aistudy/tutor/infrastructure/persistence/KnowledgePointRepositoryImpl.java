@@ -26,4 +26,9 @@ public class KnowledgePointRepositoryImpl implements KnowledgePointRepository {
     public Optional<KnowledgePoint> findById(Long id) {
         return jpaRepository.findById(id).filter(kp -> !kp.isDeleted());
     }
+
+    @Override
+    public KnowledgePoint save(KnowledgePoint knowledgePoint) {
+        return jpaRepository.save(knowledgePoint);
+    }
 }

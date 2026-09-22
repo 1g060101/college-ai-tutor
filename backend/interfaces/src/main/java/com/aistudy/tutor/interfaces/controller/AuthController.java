@@ -27,7 +27,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public Result<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        User user = userAppService.register(request.getEmail(), request.getPassword(), request.getNickname());
+        User user = userAppService.register(request.getEmail(), request.getPassword(), request.getNickname(), request.getRole());
         return Result.success(toAuthResponse(user));
     }
 

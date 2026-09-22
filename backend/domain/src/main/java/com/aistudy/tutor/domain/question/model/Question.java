@@ -66,6 +66,20 @@ public class Question {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /** 作业/题库录入用全字段构造器（source 如「作业」） */
+    public Question(Long courseId, Long knowledgePointId, String type, String content,
+                    String answer, String analysis, int difficulty, String source) {
+        this.courseId = courseId;
+        this.knowledgePointId = knowledgePointId;
+        this.type = type;
+        this.content = content;
+        this.answer = answer;
+        this.analysis = analysis;
+        this.difficulty = difficulty;
+        this.source = source;
+        this.deleted = false;
+    }
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

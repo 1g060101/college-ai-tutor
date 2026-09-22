@@ -23,4 +23,7 @@ public class RegisterRequest {
 
     @Size(max = 32, message = "昵称最长 32 个字符")
     private String nickname;
+
+    /** 注册角色：仅支持 STUDENT（默认）/ TEACHER，禁止自注册 ADMIN */
+    private String role;
 }

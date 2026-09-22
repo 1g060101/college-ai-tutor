@@ -20,15 +20,27 @@ public class UserAppService {
     private final PasswordEncoder passwordEncoder;
 
     /**
-     * 注册（默认 STUDENT 角色，密码 BCrypt 加密）
+     * 注册（默认 STUDENT 角色，密码 BCrypt 加密）。
+     * role 仅允许 STUDENT / TEACHER，禁止自注册 ADMIN 等管理角色。
      */
     @Transactional
-    public User register(String email, String password, String nickname) {
+    public User register(String email, String password, String nickname, String role) {
         if (userRepository.existsByEmail(email)) {
             throw new BusinessException(400, "该邮箱已注册");
         }
+        UserRole userRole = UserRole.STUDENT;
+        if (role != null && !role.isBlank()) {
+            try {
+                userRole = UserRole.valueOf(role.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException(400, "不支持的角色");
+            }
+            if (userRole != UserRole.STUDENT && userRole != UserRole.TEACHER) {
+                throw new BusinessException(403, "该角色不允许自助注册");
+            }
+        }
         String encoded = passwordEncoder.encode(password);
-        User user = new User(email, encoded, nickname, UserRole.STUDENT);
+        User user = new User(email, encoded, nickname, userRole);
         return userRepository.save(user);
     }
 

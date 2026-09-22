@@ -23,6 +23,11 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     }
 
     @Override
+    public Question save(Question question) {
+        return jpaRepository.save(question);
+    }
+
+    @Override
     public List<Question> findByKnowledgePointId(Long kpId) {
         return jpaRepository.findByKnowledgePointIdAndDeletedFalse(kpId);
     }

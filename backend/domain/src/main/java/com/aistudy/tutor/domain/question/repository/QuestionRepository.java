@@ -12,6 +12,9 @@ public interface QuestionRepository {
 
     Optional<Question> findById(Long id);
 
+    /** 保存题目（作业批量录入使用） */
+    Question save(Question question);
+
     /** 指定知识点的全部题目（不含已删除） */
     List<Question> findByKnowledgePointId(Long kpId);
 
