@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学科导入 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">📥 多学科课程导入</h1>
+        <p class="page-desc">先配置学科模板，再导入自定义课程（支持文本粘贴或文件上传，每行「课程名|学科|描述|难度1-5」）。</p>
+
+        <div class="card mb-lg">
+            <div class="card-title">🧩 配置学科模板</div>
+            <div class="grid-3">
+                <div class="form-group"><label>学科</label><input class="form-control" id="sub-subject" placeholder="例如：物理"></div>
+                <div class="form-group"><label>模板名称</label><input class="form-control" id="sub-tplname" placeholder="例如：物理章节模板"></div>
+                <div class="form-group"><label>字段映射（源:目标，可空）</label><input class="form-control" id="sub-fields" placeholder="章节名:name"></div>
+            </div>
+            <button class="btn btn-primary" id="btn-create-tpl">创建模板</button>
+            <div id="tpl-result" class="mt-md"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📚 导入课程（文本或文件）</div>
+            <div class="grid-2">
+                <div class="form-group"><label>模板 id <span class="form-hint">（创建模板后获得）</span></label>
+                    <input type="number" class="form-control" id="import-tpl" placeholder="模板 id"></div>
+                <div class="form-group"><label>或上传课程文件（csv/txt）</label>
+                    <input type="file" class="form-control" id="import-file" accept=".csv,.txt,.md"></div>
+            </div>
+            <div class="form-group"><label>课程文本（每行: 课程名|学科|描述|难度）</label>
+                <textarea class="form-control" id="import-content" rows="4" placeholder="例如：&#10;大学物理|物理|力学与电磁学基础|3&#10;线性代数|数学|矩阵与线性变换|3"></textarea></div>
+            <button class="btn btn-success" id="btn-import">提交导入</button>
+            <div id="import-result" class="mt-md"></div>
+
+            <div class="card-title mt-lg">🔍 查询导入任务</div>
+            <div class="flex">
+                <input type="number" class="form-control" id="job-id" placeholder="任务 id" style="max-width:200px;">
+                <button class="btn btn-outline" id="btn-job">查询状态</button>
+            </div>
+            <div id="job-result" class="mt-md"></div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('subject.html');
+
+        document.getElementById('btn-create-tpl').addEventListener('click', createTemplate);
+        document.getElementById('btn-import').addEventListener('click', importCourses);
+        document.getElementById('btn-job').addEventListener('click', queryJob);
+
+        async function createTemplate() {
+            const subject = $('#sub-subject').value.trim();
+            const tplName = $('#sub-tplname').value.trim();
+            if (!subject || !tplName) { showToast('请填写学科与模板名称', 'warning'); return; }
+            const fieldsRaw = $('#sub-fields').value.trim();
+            const fields = [];
+            if (fieldsRaw) {
+                fieldsRaw.split(/[,;，；]/).forEach(pair => {
+                    const [source, target] = pair.split(':');
+                    if (source && target) fields.push({ sourceField: source.trim(), targetField: target.trim() });
+                });
+            }
+            try {
+                const res = await api.post('/subjects', { subject, templateName: tplName, fields });
+                $('#tpl-result').innerHTML = `<div class="alert alert-success">模板创建成功！<strong>模板 id：#${res.data}</strong></div>`;
+                $('#import-tpl').value = res.data;
+                showToast('模板已创建', 'success');
+            } catch (e) {
+                $('#tpl-result').innerHTML = `<div class="alert alert-warning">创建失败：${esc(e.message)}。同一<strong>学科+模板名称</strong>需唯一，请换一个模板名称再试。</div>`;
+            }
+        }
+
+        async function importCourses() {
+            const tplId = Number($('#import-tpl').value);
+            if (!tplId) { showToast('请填写模板 id', 'warning'); return; }
+            const fd = new FormData();
+            const file = $('#import-file').files[0];
+            const content = $('#import-content').value.trim();
+            if (!file && !content) { showToast('请粘贴课程文本或选择文件', 'warning'); return; }
+            if (file) fd.append('file', file);
+            if (content) fd.append('content', content);
+            try {
+                const res = await api.upload(`/subjects/${tplId}/import`, fd);
+                $('#import-result').innerHTML = `<div class="alert alert-success">导入已提交！<strong>任务 id：#${res.data.jobId}</strong>，状态：${esc(res.data.status)}</div>`;
+                $('#job-id').value = res.data.jobId;
+                showToast('导入任务已提交', 'success');
+            } catch (e) { $('#import-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function queryJob() {
+            const id = Number($('#job-id').value);
+            if (!id) { showToast('请输入任务 id', 'warning'); return; }
+            try {
+                const res = await api.get(`/import-jobs/${id}`);
+                const d = res.data;
+                $('#job-result').innerHTML = `<div class="alert alert-info">
+                    <strong>任务 #${d.id}</strong>${d.fileName ? ' · ' + esc(d.fileName) : ''}<br>
+                    状态：<span class="badge ${d.status==='SUCCESS'?'badge-success':d.status==='FAILED'?'badge-danger':'badge-warning'}">${esc(d.status)}</span>
+                    <div class="mt-sm">总数 ${d.totalCount} · 成功 ${d.successCount} · 失败 ${d.failCount}</div>
+                    ${d.errorMsg ? '<div class="text-muted mt-sm">' + esc(d.errorMsg) + '</div>' : ''}
+                </div>`;
+            } catch (e) { $('#job-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师后台 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">👩‍🏫 教师后台</h1>
+
+        <!-- 非教师提示 -->
+        <div id="not-teacher" class="card hidden">
+            <div class="alert alert-warning">你的账号角色不是 <strong>教师（TEACHER）</strong>，无法使用教师后台功能。<br>
+            学生账号可在此「加入班级」（需老师提供的邀请码）。</div>
+            <div class="card-title mt-lg">🔑 学生加入班级</div>
+            <div class="flex">
+                <input type="number" class="form-control" id="join-class-id" placeholder="班级 id" style="max-width:150px;">
+                <input type="text" class="form-control" id="join-code" placeholder="邀请码" style="max-width:200px;">
+                <button class="btn btn-primary" id="btn-join">加入班级</button>
+            </div>
+            <div id="join-result" class="mt-md"></div>
+        </div>
+
+        <!-- 教师面板 -->
+        <div id="teacher-panel" class="hidden">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="class">班级管理</button>
+                <button class="tab-btn" data-tab="kp">上传知识点</button>
+                <button class="tab-btn" data-tab="hw">发布作业</button>
+            </div>
+
+            <div id="tab-class" class="card">
+                <div class="card-title">🏫 创建班级</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>班级名称</label><input class="form-control" id="cls-name" placeholder="例如：计科2401班"></div>
+                    <div class="form-group"><label>科目</label><input class="form-control" id="cls-subject" placeholder="例如：高等数学"></div>
+                </div>
+                <button class="btn btn-primary" id="btn-create-class">创建班级</button>
+                <div id="class-result" class="mt-md"></div>
+
+                <div class="card-title mt-lg">📋 班级信息 / 名单 / 风险 / 规则 / 风格</div>
+                <div class="flex mb-md">
+                    <input type="number" class="form-control" id="cls-id" placeholder="班级 id" style="max-width:120px;">
+                    <button class="btn btn-outline" id="btn-roster">名单</button>
+                    <button class="btn btn-outline" id="btn-risk">风险预警</button>
+                    <button class="btn btn-outline" id="btn-rules">查看规则</button>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group"><label>设置预警规则（类型 / 阈值）</label>
+                        <div class="flex">
+                            <select class="form-control" id="rule-type" style="flex:1">
+                                <option value="MASTERY">掌握度</option>
+                                <option value="FREQUENCY">学习频次</option>
+                                <option value="ABSENCE">缺勤</option>
+                            </select>
+                            <input type="number" class="form-control" id="rule-threshold" placeholder="阈值" style="flex:1" value="60">
+                        </div></div>
+                    <div class="form-group"><label>设置教学风格（语气 / 风格）</label>
+                        <div class="flex">
+                            <input type="text" class="form-control" id="style-tone" placeholder="语气" style="flex:1" value="FRIENDLY">
+                            <input type="text" class="form-control" id="style-style" placeholder="风格" style="flex:1" value="DETAILED">
+                        </div></div>
+                </div>
+                <div class="flex">
+                    <button class="btn btn-warning" id="btn-rule">保存预警规则</button>
+                    <button class="btn btn-warning" id="btn-style">保存教学风格</button>
+                </div>
+                <div id="detail-result" class="mt-md"></div>
+            </div>
+
+            <div id="tab-kp" class="hidden card">
+                <div class="card-title">🧠 上传知识点</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课程 id</label><input type="number" class="form-control" id="kp-course" value="1"></div>
+                    <div class="form-group"><label>知识点名称</label><input class="form-control" id="kp-name" placeholder="例如：泰勒展开"></div>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group"><label>难度（1-5）</label><input type="number" class="form-control" id="kp-diff" value="3" min="1" max="5"></div>
+                    <div class="form-group"><label>权重</label><input type="number" step="0.1" class="form-control" id="kp-weight" value="1" min="0"></div>
+                </div>
+                <div class="form-group"><label>标签（逗号分隔）</label><input class="form-control" id="kp-tags" placeholder="考点,重点"></div>
+                <div class="form-group"><label>描述</label><textarea class="form-control" id="kp-desc" rows="2"></textarea></div>
+                <button class="btn btn-primary" id="btn-kp">新增知识点</button>
+                <div id="kp-result" class="mt-md"></div>
+            </div>
+
+            <div id="tab-hw" class="hidden card">
+                <div class="card-title">📤 发布班级作业</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>班级 id</label><input type="number" class="form-control" id="pub-class" placeholder="班级 id"></div>
+                    <div class="form-group"><label>作业标题</label><input class="form-control" id="pub-title" placeholder="例如：第三章作业"></div>
+                </div>
+                <div class="form-group"><label>作业描述</label><textarea class="form-control" id="pub-desc" rows="2"></textarea></div>
+                <button class="btn btn-primary" id="btn-publish">发布作业</button>
+                <div id="pub-result" class="mt-md"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('teacher.html');
+
+        const isTeacher = auth.hasRole('TEACHER');
+        $('#teacher-panel').classList.toggle('hidden', !isTeacher);
+        $('#not-teacher').classList.toggle('hidden', isTeacher);
+
+        $all('.tab-btn').forEach(b => b.addEventListener('click', () => {
+            // 教师面板内的 tab（class/kp/hw）与右侧 not-teacher 判断
+            if (isTeacher) {
+                $all('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+                ['class','kp','hw'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+            }
+        }));
+
+        // 学生加入班级
+        document.getElementById('btn-join').addEventListener('click', async () => {
+            const id = Number($('#join-class-id').value);
+            const code = $('#join-code').value.trim();
+            if (!id || !code) { showToast('请填写班级 id 与邀请码', 'warning'); return; }
+            try {
+                const res = await api.post(`/classes/${id}/join`, { inviteCode: code });
+                $('#join-result').innerHTML = `<div class="alert alert-success">成功加入班级「${esc(res.data.name)}」！</div>`;
+            } catch (e) { $('#join-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        });
+
+        if (!isTeacher) return;
+
+        document.getElementById('btn-create-class').addEventListener('click', createClass);
+        document.getElementById('btn-roster').addEventListener('click', () => loadDetail('roster'));
+        document.getElementById('btn-risk').addEventListener('click', () => loadDetail('risk'));
+        document.getElementById('btn-rules').addEventListener('click', () => loadDetail('rules'));
+        document.getElementById('btn-rule').addEventListener('click', saveRule);
+        document.getElementById('btn-style').addEventListener('click', saveStyle);
+        document.getElementById('btn-kp').addEventListener('click', createKp);
+        document.getElementById('btn-publish').addEventListener('click', publishHw);
+
+        async function createClass() {
+            const name = $('#cls-name').value.trim();
+            if (!name) { showToast('请填写班级名称', 'warning'); return; }
+            try {
+                const res = await api.post('/teacher/classes', { name, subject: $('#cls-subject').value.trim() });
+                const d = res.data;
+                $('#class-result').innerHTML = `<div class="alert alert-success">
+                    <strong>班级：${esc(d.name)}</strong><br>
+                    班级 id：#${d.id} · 邀请码：<span style="font-weight:700; color:var(--color-primary);">${esc(d.inviteCode)}</span><br>
+                    <span class="text-muted">把班级 id 与邀请码告诉学生，用「加入班级」功能入班。</span></div>`;
+                $('#cls-id').value = d.id;
+                showToast('班级创建成功', 'success');
+            } catch (e) { $('#class-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        function currentClassId() {
+            const id = Number($('#cls-id').value);
+            if (!id) { showToast('请填写班级 id', 'warning'); throw new Error('no class'); }
+            return id;
+        }
+
+        async function loadDetail(type) {
+            const id = currentClassId();
+            const box = $('#detail-result');
+            box.innerHTML = '<div class="alert alert-info">加载中…</div>';
+            try {
+                if (type === 'roster') {
+                    const res = await api.get(`/classes/${id}/roster`);
+                    box.innerHTML = `<div class="alert alert-info"><strong>${esc(res.data.className)}</strong> · 学生 ${res.data.students.length} 人<br>
+                        <ul class="mt-sm">${res.data.students.map(s => `<li>${esc(s.nickname)} (#${s.studentId})</li>`).join('') || '<li>暂无学生</li>'}</ul></div>`;
+                } else if (type === 'risk') {
+                    const res = await api.get(`/classes/${id}/risk`);
+                    const d = res.data;
+                    box.innerHTML = `<div class="alert alert-warning"><strong>预警规则：</strong>${d.rules.map(r => `${r.ruleType}=${r.threshold}`).join(', ') || '默认'}</div>
+                        <div class="mt-sm"><strong>风险学生 ${d.risks.length} 人：</strong>
+                        ${d.risks.map(r => `<div class="card mt-sm" style="padding:12px;"><strong>${esc(r.nickname)}</strong> · 预警 ${r.alertCount} 次<br>
+                            <span class="text-muted">薄弱点：${r.weakPoints.map(w => `${esc(w.name)}(${w.masteryScore}分)`).join('、') || '无'}</span></div>`).join('') || '<div class="text-muted mt-sm">暂无风险学生，继续保持！</div>'}</div>`;
+                } else if (type === 'rules') {
+                    const res = await api.get(`/classes/${id}/risk`);
+                    const d = res.data;
+                    box.innerHTML = `<div class="alert alert-info"><strong>当前预警规则：</strong>${d.rules.map(r => `${r.ruleType} → 阈值 ${r.threshold}`).join('；') || '未设置（使用默认）'}</div>`;
+                }
+            } catch (e) { box.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function saveRule() {
+            const id = currentClassId();
+            try {
+                const res = await api.post(`/teacher/classes/${id}/rules`, {
+                    ruleType: $('#rule-type').value,
+                    threshold: Number($('#rule-threshold').value)
+                });
+                $('#detail-result').innerHTML = `<div class="alert alert-success">${esc(res.data)}</div>`;
+            } catch (e) { $('#detail-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function saveStyle() {
+            const id = currentClassId();
+            try {
+                const res = await api.put(`/classes/${id}/style`, {
+                    tone: $('#style-tone').value.trim(),
+                    style: $('#style-style').value.trim()
+                });
+                $('#detail-result').innerHTML = `<div class="alert alert-success">${esc(res.data)}</div>`;
+            } catch (e) { $('#detail-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function createKp() {
+            const name = $('#kp-name').value.trim();
+            if (!name) { showToast('请填写知识点名称', 'warning'); return; }
+            try {
+                const id = await api.post('/teacher/knowledge', {
+                    courseId: Number($('#kp-course').value) || undefined,
+                    name,
+                    tags: $('#kp-tags').value.trim(),
+                    difficulty: Number($('#kp-diff').value) || 3,
+                    weight: Number($('#kp-weight').value) || 1,
+                    description: $('#kp-desc').value.trim()
+                });
+                $('#kp-result').innerHTML = `<div class="alert alert-success">知识点创建成功！id：#${id.data}</div>`;
+                showToast('知识点已新增', 'success');
+            } catch (e) { $('#kp-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function publishHw() {
+            const classId = Number($('#pub-class').value);
+            const title = $('#pub-title').value.trim();
+            if (!classId || !title) { showToast('请填写班级 id 与作业标题', 'warning'); return; }
+            try {
+                const res = await api.post('/teacher/assignments', {
+                    classId, title, description: $('#pub-desc').value.trim()
+                });
+                $('#pub-result').innerHTML = `<div class="alert alert-success">作业发布成功！id：#${res.data.assignmentId}</div>`;
+            } catch (e) { $('#pub-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>

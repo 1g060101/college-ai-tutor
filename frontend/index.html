@@ -3,29 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>大学生辅助学习 AI 数字人系统</title>
+    <title>首页 - AI 数字人学习助手</title>
     <link rel="stylesheet" href="src/css/base.css">
     <link rel="stylesheet" href="src/css/components.css">
 </head>
 <body>
-    <div id="app">
-        <h1>大学生辅助学习 AI 数字人系统</h1>
-        <p id="health-status">正在检查服务状态...</p>
+    <div class="navbar hidden"></div>
+
+    <!-- 未登录引导 -->
+    <div id="guest-view" class="app hidden">
+        <div class="card" style="text-align:center; padding:60px 30px;">
+            <div style="font-size:64px;">🎓</div>
+            <h1 style="font-size:28px; margin:16px 0 8px;">AI 数字人学习助手</h1>
+            <p class="text-muted" style="font-size:15px;">大学生辅助学习的智能伴学系统：AI 答疑 · 学习报告 · 数字人陪伴 · 课程导学 · 作业错题 · 计划复习 · 课堂辅助 · 备考冲刺</p>
+            <div style="margin-top:28px; display:flex; gap:16px; justify-content:center;">
+                <a href="login.html" class="btn btn-primary">登 录</a>
+                <a href="login.html" class="btn btn-outline">注 册</a>
+            </div>
+        </div>
     </div>
+
+    <!-- 已登录仪表盘 -->
+    <div id="user-view" class="app hidden">
+        <h1 class="page-title">👋 你好，<span id="welcome-name"></span></h1>
+        <div class="alert alert-info" id="role-tip" style="max-width:720px;"></div>
+
+        <h3 class="section-title">🚀 快速入口</h3>
+        <div class="grid-3" id="quick-links"></div>
+
+        <h3 class="section-title">📦 最近学习数据</h3>
+        <div class="alert alert-success" id="summary-box" style="max-width:720px;">
+            <strong>近 7 天学习汇总</strong><br>
+            <span class="text-muted">正在加载...</span>
+        </div>
+    </div>
+
     <script src="src/config.js"></script>
     <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
     <script>
-        // 页面加载时检查后端健康状态
-        (async () => {
-            try {
-                const data = await api.get('/health');
-                document.getElementById('health-status').textContent =
-                    '后端服务状态: ' + data.data.status;
-            } catch (e) {
-                document.getElementById('health-status').textContent =
-                    '后端连接失败: ' + e.message;
-            }
-        })();
+        if (!auth.isLoggedIn()) {
+            document.getElementById('guest-view').classList.remove('hidden');
+        } else {
+            document.querySelector('.navbar').classList.remove('hidden');
+            renderNav('index.html');
+            initUserView();
+        }
+
+        function initUserView() {
+            const user = auth.getUser();
+            document.getElementById('welcome-name').textContent = user.nickname || user.email;
+            const isTeacher = user.role === 'TEACHER';
+            document.getElementById('role-tip').innerHTML = isTeacher
+                ? '你当前是 <strong>教师</strong> 账号，可使用「教师后台」管理班级、发布知识点与作业。普通学习功能同样可用。'
+                : '你当前是 <strong>学生</strong> 账号，可使用 AI 答疑、作业练习、学习计划等在学生端所有功能。';
+
+            document.getElementById('user-view').classList.remove('hidden');
+
+            // 快速入口
+            const links = [
+                { href: 'qa.html', icon: '💬', title: 'AI 答疑', desc: '流式问答 / 三阶段引导' },
+                { href: 'report.html', icon: '📊', title: '学习报告', desc: '掌握度 / 雷达 / 诊断' },
+                { href: 'avatar.html', icon: '🤖', title: '数字人', desc: '陪学对话与专注计时' },
+                { href: 'course.html', icon: '📚', title: '课程', desc: '列表 / 学习路径 / 讲解' },
+                { href: 'homework.html', icon: '✏️', title: '作业·错题', desc: '建题 / 作答 / 错题本' },
+                { href: 'studyplan.html', icon: '🗓️', title: '学习计划', desc: '预习复习 / 抽背判分' },
+                { href: 'classroom.html', icon: '🎓', title: '课堂', desc: '课件解析 / 录音总结' },
+                { href: 'paper.html', icon: '🎯', title: '备考', desc: '试卷分析 / 高频考点' },
+                { href: 'subject.html', icon: '📥', title: '学科导入', desc: '模板 / 课程导入' }
+            ];
+            if (isTeacher) links.push({ href: 'teacher.html', icon: '👩‍🏫', title: '教师后台', desc: '班级管理 / 预警 / 知识点' });
+
+            document.getElementById('quick-links').innerHTML = links.map(l => `
+                <a href="${l.href}" class="card" style="display:block; color:inherit; text-decoration:none;">
+                    <div style="font-size:30px;">${l.icon}</div>
+                    <div style="font-size:16px; font-weight:600; margin-top:8px;">${l.title}</div>
+                    <div class="text-muted" style="font-size:13px;">${l.desc}</div>
+                </a>`).join('');
+
+            // 加载 7 天汇总
+            api.get('/reports/summary').then(res => {
+                const d = res.data || {};
+                const items = Object.entries(d);
+                if (!items.length) {
+                    document.getElementById('summary-box').querySelector('.text-muted').textContent = '尚无学习数据，快去 AI 答疑或作业练习吧。';
+                    return;
+                }
+                let html = '';
+                items.forEach(([k, v]) => { html += `<span style="margin-right:20px;"><strong>${esc(k)}</strong>：${esc(v)}</span>`; });
+                document.getElementById('summary-box').querySelector('.text-muted').innerHTML = html;
+            }).catch(() => {
+                document.getElementById('summary-box').querySelector('.text-muted').textContent = '加载失败，请确认后端服务已启动。';
+            });
+        }
     </script>
 </body>
 </html>

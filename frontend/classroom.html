@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课堂 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">🎓 课堂辅助</h1>
+        <p class="page-desc">上传课件一键解析要点；粘贴课堂录音转写文本生成重点总结；揪出不懂片段让 AI 重讲。</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="material">课件上传</button>
+            <button class="tab-btn" data-tab="transcribe">录音转写</button>
+            <button class="tab-btn" data-tab="replay">片段重讲</button>
+        </div>
+
+        <div id="tab-material">
+            <div class="card">
+                <div class="card-title">📄 上传课件（txt/markdown 文本可直接解析）</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课件文件</label><input type="file" class="form-control" id="material-file" accept=".txt,.md,.csv"></div>
+                    <div class="form-group"><label>课程（可选）</label><select class="form-control" id="material-course"><option value="">不关联</option></select></div>
+                </div>
+                <button class="btn btn-primary" id="btn-material">上传并解析</button>
+                <div id="material-result" class="mt-md"></div>
+            </div>
+        </div>
+
+        <div id="tab-transcribe" class="hidden">
+            <div class="card">
+                <div class="card-title">🎙️ 课堂录音转写 → 重点总结</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课堂名称</label><input class="form-control" id="lec-name" placeholder="例如：第三章 导数与微分"></div>
+                    <div class="form-group"><label>课程（可选）</label><select class="form-control" id="lec-course"><option value="">不关联</option></select></div>
+                </div>
+                <div class="form-group"><label>转写文本（粘贴课堂内容）</label><textarea class="form-control" id="lec-text" rows="6" placeholder="这里粘贴录音转写出来的课堂文本…"></textarea></div>
+                <button class="btn btn-primary" id="btn-transcribe">生成课堂总结</button>
+                <div id="transcribe-result" class="mt-md mb-lg"></div>
+
+                <div class="card-title mt-lg">🗑️ 已保存课堂（可删除）</div>
+                <div id="lec-list" class="table-wrap"><div class="text-muted" style="padding:12px;">先在左侧生成第一个课堂总结。</div></div>
+            </div>
+        </div>
+
+        <div id="tab-replay" class="hidden">
+            <div class="card">
+                <div class="card-title">🔁 片段重讲（重新讲解不懂片段）</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课堂 id</label><input type="number" class="form-control" id="replay-id" placeholder="例如 1"></div>
+                    <div class="form-group"><label>关键词/片段</label><input class="form-control" id="replay-keyword" placeholder="例如：链式法则"></div>
+                </div>
+                <button class="btn btn-warning" id="btn-replay">重新讲解</button>
+                <div id="replay-result" class="mt-md"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('classroom.html');
+
+        loadCourses('#material-course');
+        loadCourses('#lec-course');
+
+        $all('.tab-btn').forEach(b => b.addEventListener('click', () => {
+            $all('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+            ['material','transcribe','replay'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+        }));
+
+        document.getElementById('btn-material').addEventListener('click', uploadMaterial);
+        document.getElementById('btn-transcribe').addEventListener('click', transcribe);
+        document.getElementById('btn-replay').addEventListener('click', replay);
+
+        // 后端无课堂列表接口，本页用内存数组管理本次会话创建的课堂记录
+        let myLectures = [];
+
+        function renderMyLectures() {
+            if (!myLectures.length) { $('#lec-list').innerHTML = '<div class="text-muted" style="padding:12px;">暂无已创建课堂</div>'; return; }
+            $('#lec-list').innerHTML = `
+                <table class="table">
+                    <thead><tr><th>id</th><th>课堂名称</th><th>操作</th></tr></thead>
+                    <tbody>${myLectures.map(l => `
+                        <tr>
+                            <td>#${l.id}</td><td>${esc(l.lectureName)}</td>
+                            <td><button class="btn btn-sm btn-danger del-lec" data-id="${l.id}">删除</button></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>`;
+            $all('.del-lec').forEach(b => b.addEventListener('click', () => deleteLecture(Number(b.dataset.id))));
+        }
+
+        async function loadCourses(sel) {
+            try {
+                const res = await api.get('/courses?pageNum=1&pageSize=100');
+                const list = res.data.list || [];
+                $(sel).innerHTML = '<option value="">不关联</option>' + list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+            } catch (e) {}
+        }
+
+        async function uploadMaterial() {
+            const file = $('#material-file').files[0];
+            if (!file) { showToast('请选择文件', 'warning'); return; }
+            const fd = new FormData();
+            fd.append('file', file);
+            const cid = $('#material-course').value;
+            if (cid) fd.append('courseId', cid);
+            try {
+                const res = await api.upload('/materials/parse', fd);
+                const d = res.data;
+                $('#material-result').innerHTML = `
+                    <div class="alert alert-${d.status === 'DONE' ? 'success' : 'warning'}">
+                        <strong>文件：${esc(d.fileName)}</strong> · 状态：${esc(d.status)}<br>
+                        ${d.summary ? '<strong>要点提炼：</strong><div class="mt-sm">' + esc(d.summary) + '</div>' : (d.errorMsg ? '提示：' + esc(d.errorMsg) : '')}
+                    </div>`;
+                showToast('课件解析完成', 'success');
+            } catch (e) { $('#material-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function transcribe() {
+            const text = $('#lec-text').value.trim();
+            if (!text) { showToast('请输入转写文本', 'warning'); return; }
+            const body = {
+                lectureName: $('#lec-name').value.trim(),
+                courseId: $('#lec-course').value ? Number($('#lec-course').value) : undefined,
+                transcriptText: text
+            };
+            try {
+                const res = await api.post('/lectures/transcribe', body);
+                const d = res.data;
+                $('#transcribe-result').innerHTML = `
+                    <div class="alert alert-success">
+                        <strong>「${esc(d.lectureName)}」课堂总结</strong>（id #${d.id}）<br>
+                        <div class="mt-sm" style="white-space:pre-wrap;">${esc(d.summary)}</div>
+                    </div>`;
+                myLectures.unshift({ id: d.id, lectureName: d.lectureName || ('课堂' + d.id) });
+                renderMyLectures();
+                showToast('课堂总结已生成', 'success');
+            } catch (e) { $('#transcribe-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function deleteLecture(id) {
+            try {
+                await api.del(`/recordings/${id}`);
+                myLectures = myLectures.filter(l => l.id !== id);
+                renderMyLectures();
+                showToast('课堂记录已删除', 'success');
+            } catch (e) { showToast('删除失败：' + e.message, 'error'); }
+        }
+
+        async function replay() {
+            const id = Number($('#replay-id').value);
+            const keyword = $('#replay-keyword').value.trim();
+            if (!id || !keyword) { showToast('请填写课堂 id 与关键词', 'warning'); return; }
+            try {
+                const res = await api.post(`/lectures/${id}/replay`, { keyword });
+                $('#replay-result').innerHTML = `
+                    <div class="alert alert-info">
+                        <strong>定位片段：</strong>${esc(res.data.fragment)}<br>
+                        <strong class="mt-sm">AI 重新讲解：</strong><div class="mt-sm" style="white-space:pre-wrap;">${esc(res.data.explanation)}</div>
+                    </div>`;
+            } catch (e) { $('#replay-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>

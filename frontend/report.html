@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习报告 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">📊 学习报告</h1>
+        <p class="page-desc">掌握度雷达 · 学习诊断 · 周/月报，反应你的学习掌握情况。</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="summary">7 天汇总</button>
+            <button class="tab-btn" data-tab="radar">知识面雷达</button>
+            <button class="tab-btn" data-tab="diagnosis">学习诊断</button>
+            <button class="tab-btn" data-tab="report">周期报告</button>
+        </div>
+
+        <div id="tab-summary">
+            <div class="card" id="summary-card"><div class="text-muted">加载中…</div></div>
+        </div>
+        <div id="tab-radar" class="hidden">
+            <div class="card" id="radar-card"><div class="text-muted">加载中…</div></div>
+        </div>
+        <div id="tab-diagnosis" class="hidden">
+            <div class="card" id="diagnosis-card"><div class="text-muted">加载中…</div></div>
+        </div>
+        <div id="tab-report" class="hidden">
+            <div class="flex mb-md">
+                <button class="btn btn-outline toggle-report active" data-p="DAY">近 7 天</button>
+                <button class="btn btn-outline toggle-report" data-p="WEEK">周报</button>
+                <button class="btn btn-outline toggle-report" data-p="MONTH">月报</button>
+            </div>
+            <div class="card" id="report-card"><div class="text-muted">请选择周期查看。</div></div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('report.html');
+
+        $all('.tab-btn').forEach(b => b.addEventListener('click', () => {
+            $all('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+            ['summary','radar','diagnosis','report'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+            if (b.dataset.tab === 'summary') loadSummary();
+            if (b.dataset.tab === 'radar') loadRadar();
+            if (b.dataset.tab === 'diagnosis') loadDiagnosis();
+        }));
+
+        $all('.toggle-report').forEach(b => b.addEventListener('click', () => {
+            $all('.toggle-report').forEach(x => x.classList.toggle('active', x === b));
+            loadReport(b.dataset.p === 'DAY' ? 'week' : (b.dataset.p === 'WEEK' ? 'week' : 'month'));
+        }));
+
+        loadSummary();
+
+        function kvTable(obj) {
+            if (!obj || !Object.keys(obj).length) return '<div class="text-muted">暂无数据</div>';
+            if (Array.isArray(obj)) {
+                return '<ol>' + obj.map(x => `<li>${esc(x)}</li>`).join('') + '</ol>';
+            }
+            let html = '';
+            for (const [k, v] of Object.entries(obj)) {
+                html += `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${esc(v === null || v === undefined ? '-' : v)}</span></div>`;
+            }
+            return html;
+        }
+
+        async function loadSummary() {
+            try {
+                const res = await api.get('/reports/summary');
+                $('#summary-card').innerHTML = `<div class="card-title">近 7 天学习汇总</div>${kvTable(res.data)}`;
+            } catch (e) { $('#summary-card').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+
+        async function loadRadar() {
+            try {
+                const res = await api.get('/reports/radar');
+                const d = res.data || {};
+                $('#radar-card').innerHTML = `<div class="card-title">知识点掌握度雷达</div><div id="radar-canvas"></div><div class="mt-md">${kvTable(d)}</div>`;
+                renderRadar(d);
+            } catch (e) { $('#radar-card').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+
+        function renderRadar(d) {
+            const entries = Object.entries(d || {});
+            if (!entries.length) return;
+            const w = 480, h = 340, cx = w / 2, cy = h / 2 - 10, R = 120, n = Math.max(entries.length, 3);
+            const c = document.createElement('canvas');
+            c.className = 'radar'; c.width = w; c.height = h;
+            const g = c.getContext('2d');
+
+            g.clearRect(0, 0, w, h);
+            for (let ring = 1; ring <= 4; ring++) {
+                g.beginPath();
+                for (let i = 0; i <= n; i++) {
+                    const a = (i % n) * 2 * Math.PI / n - Math.PI / 2;
+                    const x = cx + Math.cos(a) * R * ring / 4;
+                    const y = cy + Math.sin(a) * R * ring / 4;
+                    i ? g.lineTo(x, y) : g.moveTo(x, y);
+                }
+                g.strokeStyle = '#e5e7eb'; g.stroke();
+            }
+            // 直径线
+            for (let i = 0; i < n; i++) {
+                const a = i * 2 * Math.PI / n - Math.PI / 2;
+                g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); g.strokeStyle = '#e5e7eb'; g.stroke();
+                const lx = cx + Math.cos(a) * (R + 18), ly = cy + Math.sin(a) * (R + 18);
+                const keys = Object.keys(d);
+                const label = keys[i] || '';
+                g.fillStyle = '#374151'; g.font = '12px sans-serif';
+                g.textAlign = 'center';
+                g.fillText(label.length > 6 ? label.slice(0, 6) + '…' : label, lx, ly);
+            }
+            // 数据多边形
+            const vals = Object.values(d).map(v => {
+                const num = typeof v === 'number' ? v : parseFloat(v);
+                return isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
+            });
+            g.beginPath();
+            for (let i = 0; i < n; i++) {
+                const a = i * 2 * Math.PI / n - Math.PI / 2;
+                const x = cx + Math.cos(a) * R * vals[i] / 100;
+                const y = cy + Math.sin(a) * R * vals[i] / 100;
+                i ? g.lineTo(x, y) : g.moveTo(x, y);
+            }
+            g.closePath();
+            g.fillStyle = 'rgba(99,102,241,0.25)'; g.fill();
+            g.strokeStyle = '#6366f1'; g.lineWidth = 2; g.stroke();
+            $('#radar-canvas').appendChild(c);
+        }
+
+        async function loadDiagnosis() {
+            try {
+                const res = await api.get('/reports/diagnosis');
+                $('#diagnosis-card').innerHTML = `<div class="card-title">学习诊断</div>${kvTable(res.data)}`;
+            } catch (e) { $('#diagnosis-card').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+
+        async function loadReport(period) {
+            period = period || 'week';
+            try {
+                const res = await api.get(`/reports/${period}`);
+                $('#report-card').innerHTML = kvTable(res.data);
+            } catch (e) { $('#report-card').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>

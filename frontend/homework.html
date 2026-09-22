@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作业·错题 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">✏️ 作业与错题本</h1>
+        <p class="page-desc">创建作业题目、提交作答（答错自动收录错题本）、阅读错题并与知识点联动，配置完成提醒。</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="create">建题</button>
+            <button class="tab-btn" data-tab="submit">提交作答</button>
+            <button class="tab-btn" data-tab="err">错题本</button>
+            <button class="tab-btn" data-tab="remind">提醒设置</button>
+        </div>
+
+        <div id="tab-create">
+            <div class="card">
+                <div class="card-title">📝 创建作业（批量建题）</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课程</label>
+                        <select class="form-control" id="hw-course"></select></div>
+                    <div class="form-group"><label>知识点（可选）</label>
+                        <select class="form-control" id="homework-kp"><option value="">不限</option></select></div>
+                </div>
+                <div class="form-group"><label>题型</label>
+                    <select class="form-control" id="hw-type">
+                        <option value="SUBJECTIVE">主观题（SUBJECTIVE）</option>
+                        <option value="CHOICE">选择题（CHOICE）</option>
+                        <option value="FILL_BLANK">填空题（FILL_BLANK）</option>
+                    </select></div>
+                <div class="form-group"><label>题目内容</label><textarea class="form-control" id="hw-content" rows="2"></textarea></div>
+                <div class="grid-2">
+                    <div class="form-group"><label>参考答案</label><input type="text" class="form-control" id="hw-answer"></div>
+                    <div class="form-group"><label>难度（1-5）</label><input type="number" class="form-control" id="hw-diff" min="1" max="5" value="3"></div>
+                </div>
+                <div class="form-group"><label>答案解析</label><textarea class="form-control" id="hw-analysis" rows="2"></textarea></div>
+                <button class="btn btn-primary" id="btn-add-q">➕ 加入题目（第 <span id="q-count">0</span> 道）</button>
+                <button class="btn btn-success mt-md" id="btn-create-hw" style="width:100%;">一次性创建以上题目</button>
+                <div id="create-result" class="mt-md text-muted"></div>
+            </div>
+        </div>
+
+        <div id="tab-submit" class="hidden">
+            <div class="card">
+                <div class="card-title">📥 提交作答 / 收录错题</div>
+                <div class="form-group"><label>需要提交的题目 id</label><input type="number" class="form-control" id="sub-qid" placeholder="例如 1"></div>
+                <div class="form-group"><label>作答内容</label><textarea class="form-control" id="sub-content" rows="2"></textarea></div>
+                <div class="grid-2">
+                    <div class="form-group"><label>是否正确</label>
+                        <select class="form-control" id="sub-correct"><option value="true">正确</option><option value="false">错误</option></select></div>
+                    <div class="form-group"><label>得分（0-100）</label><input type="number" class="form-control" id="sub-score" value="0" min="0" max="100"></div>
+                </div>
+                <button class="btn btn-primary" id="btn-submit">提交作答</button>
+                <div id="submit-result" class="mt-md text-muted"></div>
+            </div>
+        </div>
+
+        <div id="tab-err" class="hidden">
+            <div class="card">
+                <div class="card-title flex justify-between">
+                    <span>📕 错题本</span>
+                    <span class="text-muted" id="err-page-info"></span>
+                </div>
+                <div id="err-list" class="table-wrap"><div class="text-muted" style="padding:12px;">加载中…</div></div>
+                <div class="flex justify-between mt-md">
+                    <button class="btn btn-sm btn-outline-muted" id="btn-err-prev">上一页</button>
+                    <button class="btn btn-sm btn-outline-muted" id="btn-err-next">下一页</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-remind" class="hidden">
+            <div class="card">
+                <div class="card-title">🔔 作业完成提醒</div>
+                <div class="flex">
+                    <label class="flex" style="gap:6px;"><input type="checkbox" id="remind-enabled"> 开启提醒</label>
+                </div>
+                <div class="form-group mt-md"><label>提前提醒小时数</label>
+                    <input type="number" class="form-control" id="remind-hours" value="24" min="1" max="720"></div>
+                <button class="btn btn-primary" id="btn-save-remind">保存提醒配置</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('homework.html');
+
+        let pendingQuestions = [];
+        let errPage = 1;
+
+        $all('.tab-btn').forEach(b => b.addEventListener('click', () => {
+            $all('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+            ['create','submit','err','remind'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+            if (b.dataset.tab === 'err') loadErrorBook(1);
+        }));
+
+        loadCourses();
+        loadErrorBook(1);
+
+        document.getElementById('btn-prev'); // noop
+        document.getElementById('btn-add-q').addEventListener('click', addQuestion);
+        document.getElementById('btn-create-hw').addEventListener('click', createHomework);
+        document.getElementById('btn-submit').addEventListener('click', submitAnswer);
+        document.getElementById('btn-err-prev').addEventListener('click', () => { if (errPage > 1) loadErrorBook(errPage - 1); });
+        document.getElementById('btn-err-next').addEventListener('click', () => loadErrorBook(errPage + 1));
+        document.getElementById('btn-save-remind').addEventListener('click', saveReminder);
+
+        async function loadCourses() {
+            try {
+                const res = await api.get('/courses?pageNum=1&pageSize=100');
+                const list = res.data.list || [];
+                $('#hw-course').innerHTML = list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+            } catch (e) { showToast('加载课程失败', 'error'); }
+        }
+
+        function addQuestion() {
+            const content = $('#hw-content').value.trim();
+            if (!content) { showToast('请填写题目内容', 'warning'); return; }
+            pendingQuestions.push({
+                content,
+                type: $('#hw-type').value,
+                answer: $('#hw-answer').value.trim(),
+                analysis: $('#hw-analysis').value.trim(),
+                difficulty: Number($('#hw-diff').value) || 3
+            });
+            $('#q-count').textContent = pendingQuestions.length;
+            $('#hw-content').value = ''; $('#hw-answer').value = ''; $('#hw-analysis').value = '';
+            showToast('已加入题目 #' + pendingQuestions.length, 'info');
+        }
+
+        async function createHomework() {
+            if (!pendingQuestions.length) { showToast('请先加入至少一道题', 'warning'); return; }
+            const courseId = Number($('#hw-course').value);
+            try {
+                const res = await api.post('/assignments', { courseId, questions: pendingQuestions });
+                $('#create-result').innerHTML = `<div class="alert alert-success">已创建 ${res.data.count} 道题目，题目 id：${res.data.questionIds.join(', ')}</div>`;
+                pendingQuestions = [];
+                $('#q-count').textContent = 0;
+                showToast('作业创建成功', 'success');
+            } catch (e) { showToast('创建失败：' + e.message, 'error'); }
+        }
+
+        async function submitAnswer() {
+            const qid = Number($('#sub-qid').value);
+            if (!qid) { showToast('请填写题目 id', 'warning'); return; }
+            const correct = $('#sub-correct').value === 'true';
+            const body = {
+                answerContent: $('#sub-content').value.trim(),
+                correct,
+                score: Number($('#sub-score').value) || (correct ? 100 : 0),
+                durationSeconds: 60,
+                requestId: 'fe-' + Date.now()
+            };
+            try {
+                const res = await api.post(`/assignments/${qid}/answers`, body);
+                $('#submit-result').innerHTML = `<div class="alert ${correct ? 'alert-success' : 'alert-warning'}">${esc(res.data)}${correct ? '' : ' （已收录错题本）'}</div>`;
+                showToast(correct ? '作答已记录' : '已收录错题本', correct ? 'success' : 'warning');
+            } catch (e) { $('#submit-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function loadErrorBook(page) {
+            errPage = page;
+            try {
+                const res = await api.get(`/error-book?pageNum=${page}&pageSize=10`);
+                const d = res.data;
+                $('#err-page-info').textContent = `共 ${d.total} 条，第 ${d.pageNum}/${d.totalPages} 页`;
+                const list = d.list || [];
+                if (!list.length) { $('#err-list').innerHTML = '<div class="text-muted" style="padding:12px;">暂无错题，尽情享受你的做题吧 🎉</div>'; return; }
+                $('#err-list').innerHTML = `
+                    <table class="table">
+                        <thead><tr><th>题目</th><th>知识点</th><th>错误次数</th><th>已掌握</th><th>最近出错</th></tr></thead>
+                        <tbody>${list.map(e => `
+                            <tr>
+                                <td>${(e.content || '').slice(0, 40)}${(e.content||'').length>40?'…':''}</td>
+                                <td>${esc(e.kpName || '-')}</td>
+                                <td>${e.errorCount}</td>
+                                <td>${e.mastered ? '<span class="badge badge-success">已掌握</span>' : '<span class="badge badge-warning">待巩固</span>'}</td>
+                                <td>${fmtTime(e.lastWrongAt)}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>`;
+            } catch (e) { $('#err-list').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function saveReminder() {
+            const body = { enabled: $('#remind-enabled').checked, remindBeforeHours: Number($('#remind-hours').value) || 24 };
+            try {
+                await api.post('/reminders', body);
+                showToast('提醒配置已保存', 'success');
+            } catch (e) { showToast('保存失败：' + e.message, 'error'); }
+        }
+    </script>
+</body>
+</html>

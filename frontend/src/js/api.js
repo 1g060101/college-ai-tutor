@@ -29,4 +29,25 @@ const api = {
     post: (url, body)     => request(url, { method: 'POST', body: JSON.stringify(body) }),
     put:  (url, body)     => request(url, { method: 'PUT',  body: JSON.stringify(body) }),
     del:  (url)           => request(url, { method: 'DELETE' }),
+
+    // multipart 上传（课件/图片/导入文件等）
+    async upload(url, formData) {
+        const token = localStorage.getItem(CONFIG.TOKEN_KEY);
+        const fullUrl = `${CONFIG.API_BASE_URL}${url}`;
+        const response = await fetch(fullUrl, {
+            method: 'POST',
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            body: formData   // 不手动设置 Content-Type，交给浏览器填充 boundary
+        });
+        if (response.status === 401) {
+            localStorage.removeItem(CONFIG.TOKEN_KEY);
+            window.location.href = '/index.html';
+            return;
+        }
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || '请求失败');
+        }
+        return data;
+    }
 };

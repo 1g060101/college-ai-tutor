@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习计划 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">🗓️ 预习复习规划</h1>
+        <p class="page-desc">按艾宾浩斯遗忘曲线生成预习/复习计划，今日回顾完成任务，抽背默写自动判分。</p>
+
+        <div class="grid-2">
+            <div class="card mb-lg">
+                <div class="card-title">📅 生成计划</div>
+                <div class="form-group"><label>计划标题</label><input class="form-control" id="plan-title" placeholder="例如：高数期末复习"></div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课程</label><select class="form-control" id="plan-course"></select></div>
+                    <div class="form-group"><label>周期</label>
+                        <select class="form-control" id="plan-period">
+                            <option value="WEEK">周计划</option>
+                            <option value="MONTH">月计划</option>
+                            <option value="EXAM">考前冲刺</option>
+                        </select></div>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group"><label>开始日期</label><input type="date" class="form-control" id="plan-start"></div>
+                    <div class="form-group"><label>结束日期</label><input type="date" class="form-control" id="plan-end"></div>
+                </div>
+                <button class="btn btn-primary" id="btn-create-plan">生成计划</button>
+                <div id="plan-result" class="mt-md text-muted"></div>
+            </div>
+
+            <div class="card mb-lg">
+                <div class="card-title">🧠 抽背判分</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课程</label><select class="form-control" id="recite-course"></select></div>
+                    <div class="form-group"><label>知识点（可选）</label><input type="number" class="form-control" id="recite-kp" placeholder="知识点 id"></div>
+                </div>
+                <div class="form-group"><label>标准答案</label><textarea class="form-control" id="recite-expected" rows="2" placeholder="例如：第一个重要极限，结果等于 1"></textarea></div>
+                <div class="form-group"><label>我的作答</label><textarea class="form-control" id="recite-content" rows="2" placeholder="输入你默写/背诵的内容"></textarea></div>
+                <button class="btn btn-warning" id="btn-recite">判分</button>
+                <div id="recite-result" class="mt-md"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">✅ 今日回顾</div>
+            <button class="btn btn-sm btn-outline" id="btn-refresh-today">刷新</button>
+            <div id="today-list" class="mt-md table-wrap"><div class="text-muted" style="padding:12px;">加载中…</div></div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('studyplan.html');
+
+        loadCourses();
+        loadToday();
+
+        document.getElementById('btn-create-plan').addEventListener('click', createPlan);
+        document.getElementById('btn-recite').addEventListener('click', recite);
+        document.getElementById('btn-refresh-today').addEventListener('click', loadToday);
+
+        function todayStr() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+
+        async function loadCourses() {
+            try {
+                const res = await api.get('/courses?pageNum=1&pageSize=100');
+                const list = res.data.list || [];
+                const opts = list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+                $('#plan-course').innerHTML = opts;
+                $('#recite-course').innerHTML = opts;
+            } catch (e) {}
+        }
+
+        async function createPlan() {
+            const body = {
+                title: $('#plan-title').value.trim() || '默认学习计划',
+                courseId: $('#plan-course').value ? Number($('#plan-course').value) : undefined,
+                period: $('#plan-period').value,
+                startDate: $('#plan-start').value || todayStr(),
+                endDate: $('#plan-end').value || undefined
+            };
+            try {
+                const res = await api.post('/study-plans', body);
+                $('#plan-result').innerHTML = `<div class="alert alert-success">计划创建成功！共生成 ${res.data.taskCount} 个学习任务。</div>`;
+                loadToday();
+                showToast('计划已生成', 'success');
+            } catch (e) { $('#plan-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function loadToday() {
+            try {
+                const res = await api.get('/study-plans/today');
+                const list = res.data || [];
+                if (!list.length) { $('#today-list').innerHTML = '<div class="text-muted" style="padding:12px;">今天没有待回顾的任务 🎉</div>'; return; }
+                $('#today-list').innerHTML = `
+                    <table class="table">
+                        <thead><tr><th>任务标题</th><th>类型</th><th>知识点</th><th>下次回顾</th><th>操作</th></tr></thead>
+                        <tbody>${list.map(t => `
+                            <tr data-plan="${t.planId}" data-task="${t.taskId}">
+                                <td>${esc(t.title)}</td>
+                                <td>${esc(t.taskType)}</td>
+                                <td>${t.kpId ? '#' + t.kpId : '-'}</td>
+                                <td>${t.nextReviewDate || '-'}</td>
+                                <td><button class="btn btn-sm btn-outline complete-btn">完成</button></td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>`;
+                $all('.complete-btn').forEach(b => b.addEventListener('click', () => {
+                    const tr = b.closest('tr');
+                    completeTask(Number(tr.dataset.plan), Number(tr.dataset.task), tr);
+                }));
+            } catch (e) { $('#today-list').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function completeTask(planId, taskId, tr) {
+            try {
+                const res = await api.post(`/study-plans/${planId}/sessions`, { taskId, correct: true, durationSeconds: 300 });
+                showToast('任务完成，下次回顾：' + (res.data.nextReviewDate || ''), 'success');
+                tr.remove();
+            } catch (e) { showToast('操作失败：' + e.message, 'error'); }
+        }
+
+        async function recite() {
+            const body = {
+                courseId: $('#recite-course').value ? Number($('#recite-course').value) : undefined,
+                kpId: $('#recite-kp').value ? Number($('#recite-kp').value) : undefined,
+                expected: $('#recite-expected').value.trim(),
+                content: $('#recite-content').value.trim()
+            };
+            if (!body.expected || !body.content) { showToast('请填写标准答案与作答', 'warning'); return; }
+            try {
+                const res = await api.post('/quizzes/recite', body);
+                const d = res.data;
+                const color = d.correct ? 'success' : 'warning';
+                $('#recite-result').innerHTML = `<div class="alert alert-${color}">
+                    <strong>${d.correct ? '✅ 判分正确' : '⚠️ 判分结果：未完全匹配'}</strong> · 得分 ${d.score}/100<br>
+                    <span class="text-muted">匹配到：${esc(d.matchedContent || '无')}</span></div>`;
+            } catch (e) { $('#recite-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>

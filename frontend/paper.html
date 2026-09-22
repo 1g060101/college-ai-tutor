@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>备考 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">🎯 备考冲刺</h1>
+        <p class="page-desc">上传真题/模拟卷、整卷 AI 讲解、高频考点串讲、个性化答题技巧。</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="create">创建试卷</button>
+            <button class="tab-btn" data-tab="analyze">试卷分析</button>
+            <button class="tab-btn" data-tab="hot">高频考点</button>
+            <button class="tab-btn" data-tab="tips">答题技巧</button>
+        </div>
+
+        <div id="tab-create">
+            <div class="card">
+                <div class="card-title">📝 创建试卷</div>
+                <div class="grid-2">
+                    <div class="form-group"><label>课程</label><select class="form-control" id="paper-course"></select></div>
+                    <div class="form-group"><label>卷型</label>
+                        <select class="form-control" id="paper-type">
+                            <option value="MOCK">模拟卷（MOCK）</option>
+                            <option value="REAL">真题（REAL）</option>
+                        </select></div>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group"><label>试卷标题</label><input class="form-control" id="paper-title" placeholder="例如：2025 高数模拟一"></div>
+                    <div class="form-group"><label>年份 / 时长（分钟）</label>
+                        <div class="flex">
+                            <input type="number" class="form-control" id="paper-year" placeholder="年份" style="flex:1;" value="2025">
+                            <input type="number" class="form-control" id="paper-dur" placeholder="时长" style="flex:1;" value="120">
+                        </div></div>
+                </div>
+                <div class="form-group"><label>题目（题目 id 和分值，可加多行，用“id:分值”分隔）</label>
+                    <textarea class="form-control" id="paper-questions" rows="4" placeholder="例如：&#10;1:10&#10;2:10&#10;3:10&#10;4:10&#10;5:10"></textarea></div>
+                <button class="btn btn-primary" id="btn-create-paper">创建试卷</button>
+                <div id="paper-create-result" class="mt-md"></div>
+            </div>
+        </div>
+
+        <div id="tab-analyze" class="hidden">
+            <div class="card">
+                <div class="card-title">🧾 试卷 AI 讲解</div>
+                <div class="form-group"><label>试卷 id</label><input type="number" class="form-control" id="analyze-id" placeholder="创建试卷后得到的 id"></div>
+                <button class="btn btn-primary" id="btn-analyze">开始分析</button>
+                <div id="analyze-result" class="mt-md"></div>
+            </div>
+        </div>
+
+        <div id="tab-hot" class="hidden">
+            <div class="card">
+                <div class="card-title">🔥 高频考点串讲</div>
+                <div class="form-group mb-md"><label>按课程筛选（可选）</label><select class="form-control" id="hot-course"></select></div>
+                <button class="btn btn-primary" id="btn-hot">生成串讲</button>
+                <div id="hot-result" class="mt-md"></div>
+            </div>
+        </div>
+
+        <div id="tab-tips" class="hidden">
+            <div class="card">
+                <div class="card-title">💡 个性化答题技巧</div>
+                <button class="btn btn-primary" id="btn-tips">获取技巧建议</button>
+                <div id="tips-result" class="mt-md"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('paper.html');
+
+        loadCourses();
+
+        $all('.tab-btn').forEach(b => b.addEventListener('click', () => {
+            $all('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+            ['create','analyze','hot','tips'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+        }));
+
+        document.getElementById('btn-create-paper').addEventListener('click', createPaper);
+        document.getElementById('btn-analyze').addEventListener('click', analyzePaper);
+        document.getElementById('btn-hot').addEventListener('click', hotPoints);
+        document.getElementById('btn-tips').addEventListener('click', getTips);
+
+        async function loadCourses() {
+            try {
+                const res = await api.get('/courses?pageNum=1&pageSize=100');
+                const list = res.data.list || [];
+                const opts = list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+                $('#paper-course').innerHTML = opts;
+                $('#hot-course').innerHTML = '<option value="">全部课程</option>' + opts;
+            } catch (e) {}
+        }
+
+        async function createPaper() {
+            const courseId = Number($('#paper-course').value);
+            const raw = $('#paper-questions').value.trim().split('\n').map(s => s.trim()).filter(Boolean);
+            if (!courseId) { showToast('请选择课程', 'warning'); return; }
+            if (!raw.length) { showToast('请填写至少一行题目', 'warning'); return; }
+            const questions = raw.map(line => {
+                const parts = line.split(/[:：]/);
+                return { questionId: Number(parts[0]), score: Number(parts[1] || 10) };
+            }).filter(q => !isNaN(q.questionId));
+            if (!questions.length) { showToast('题目格式应为“id:分值”', 'warning'); return; }
+            const body = {
+                courseId,
+                title: $('#paper-title').value.trim() || '未命名试卷',
+                paperType: $('#paper-type').value,
+                year: Number($('#paper-year').value) || undefined,
+                durationMinutes: Number($('#paper-dur').value) || undefined,
+                questions
+            };
+            try {
+                const res = await api.post('/papers', body);
+                $('#paper-create-result').innerHTML = `<div class="alert alert-success">试卷创建成功！<strong>id：#${res.data.paperId}</strong>，含 ${res.data.questionCount} 道题。可切到「试卷分析」输入该 id 查看讲解。</div>`;
+                showToast('试卷创建成功 #' + res.data.paperId, 'success');
+            } catch (e) { $('#paper-create-result').innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function analyzePaper() {
+            const id = Number($('#analyze-id').value);
+            if (!id) { showToast('请输入试卷 id', 'warning'); return; }
+            const box = $('#analyze-result');
+            box.innerHTML = '<div class="alert alert-info">正在生成整卷讲解…</div>';
+            try {
+                const res = await api.get(`/papers/${id}/analysis`);
+                box.innerHTML = `<div class="alert alert-success"><strong>「${esc(res.data.title)}」整卷讲解</strong><div class="mt-sm" style="white-space:pre-wrap;">${esc(res.data.analysisText)}</div></div>`;
+            } catch (e) { box.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function hotPoints() {
+            const box = $('#hot-result');
+            const courseId = $('#hot-course').value ? Number($('#hot-course').value) : undefined;
+            const url = '/exams/hot-points' + (courseId ? `?courseId=${courseId}` : '');
+            box.innerHTML = '<div class="alert alert-info">正在生成高频考点…</div>';
+            try {
+                const res = await api.get(url);
+                const d = res.data;
+                let html = '<div class="alert alert-info">';
+                if (d.points && d.points.length) {
+                    html += '<strong>高频考点：</strong><ul class="mt-sm">' + d.points.map(p => `<li>${esc(p.name)} · 考察频次 ${p.examFreq} · 权重 ${p.weight}</li>`).join('') + '</ul>';
+                }
+                if (d.narrationText) html += '<div class="mt-sm" style="white-space:pre-wrap;"><strong>串讲：</strong>' + esc(d.narrationText) + '</div>';
+                html += '</div>';
+                box.innerHTML = html;
+            } catch (e) { box.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+
+        async function getTips() {
+            const box = $('#tips-result');
+            box.innerHTML = '<div class="alert alert-info">正在生成答题技巧…</div>';
+            try {
+                const res = await api.get('/exams/tips');
+                const d = res.data;
+                let html = '<div class="alert alert-success"><ul>';
+                (d.tips || []).forEach(t => html += `<li>${esc(t)}</li>`);
+                html += '</ul>';
+                (d.disclaimers || []).forEach(t => html += `<div class="text-muted mt-sm" style="font-size:12px;">* ${esc(t)}</div>`);
+                html += '</div>';
+                box.innerHTML = html;
+            } catch (e) { box.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>

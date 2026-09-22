@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字人 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">🤖 AI 数字人陪伴</h1>
+        <p class="page-desc">配置你的专属数字人形象，陪聊答疑，还能开启专注计时帮你进入心流。</p>
+
+        <div class="grid-2">
+            <div>
+                <div class="card mb-lg">
+                    <div class="card-title">🎨 数字人配置</div>
+                    <div class="form-group">
+                        <label>数字人名称</label>
+                        <input type="text" class="form-control" id="c-name" placeholder="例如：小知"></div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>语气</label>
+                            <select class="form-control" id="c-tone">
+                                <option value="FRIENDLY">友好（FRIENDLY）</option>
+                                <option value="STRICT">严格（STRICT）</option>
+                                <option value="CASUAL">随性（CASUAL）</option>
+                            </select></div>
+                        <div class="form-group">
+                            <label>讲解风格</label>
+                            <select class="form-control" id="c-style">
+                                <option value="CONCISE">简洁（CONCISE）</option>
+                                <option value="DETAILED">详尽（DETAILED）</option>
+                                <option value="MOTIVATIONAL">激励（MOTIVATIONAL）</option>
+                            </select></div>
+                    </div>
+                    <div class="form-group">
+                        <label>音色</label>
+                        <input type="text" class="form-control" id="c-voice" placeholder="例如：温柔女声 / 沉稳男声">
+                    </div>
+                    <button class="btn btn-primary" id="btn-save-config">保存配置</button>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">⏱️ 专注计时</div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>预设专注时长（分钟）</label>
+                            <input type="number" class="form-control" id="focus-min" value="25" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>关联课程</label>
+                            <select class="form-control" id="focus-course"><option value="">不关联</option></select>
+                        </div>
+                    </div>
+                    <div class="flex">
+                        <button class="btn btn-success" id="btn-focus-start">开始专注</button>
+                        <button class="btn btn-danger hidden" id="btn-focus-end">结束专注</button>
+                    </div>
+                    <div class="mt-md text-muted" id="focus-info">尚未开始专注。</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="card">
+                    <div class="card-title">💬 与数字人对话</div>
+                    <div id="avatar-chat" style="min-height:340px; max-height:46vh; overflow-y:auto; margin-bottom:12px;">
+                        <div class="chat-bubble assistant" id="avatar-welcome">你好，我是你的 AI 学习陪伴员！有什么想聊的、想问的，都告诉我吧。</div>
+                    </div>
+                    <div class="flex">
+                        <input type="text" class="form-control" id="avatar-input" style="flex:1;" placeholder="输入想咨询的内容…">
+                        <button class="btn btn-primary" id="btn-avatar-send">发送</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('avatar.html');
+
+        let focusSession = null;
+        let focusTimer = null;
+        let focusStartTime = 0;
+        let focusSeconds = 0;
+
+        loadCourses();
+        loadConfig();
+
+        document.getElementById('btn-save-config').addEventListener('click', saveConfig);
+        document.getElementById('btn-avatar-send').addEventListener('click', sendChat);
+        document.getElementById('avatar-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+        document.getElementById('btn-focus-start').addEventListener('click', startFocus);
+        document.getElementById('btn-focus-end').addEventListener('click', endFocus);
+
+        async function loadCourses() {
+            try {
+                const res = await api.get('/courses?pageNum=1&pageSize=100');
+                const list = res.data.list || [];
+                $('#focus-course').innerHTML = '<option value="">不关联</option>' + list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+            } catch (e) {}
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await api.get('/avatar/config');
+                const d = res.data || {};
+                if (d.avatarName) $('#c-name').value = d.avatarName;
+                if (d.tone) $('#c-tone').value = d.tone;
+                if (d.style) $('#c-style').value = d.style;
+                if (d.voice) $('#c-voice').value = d.voice;
+            } catch (e) {}
+        }
+
+        async function saveConfig() {
+            const body = {
+                avatarName: $('#c-name').value.trim(),
+                tone: $('#c-tone').value,
+                style: $('#c-style').value,
+                voice: $('#c-voice').value.trim()
+            };
+            try {
+                const res = await api.put('/avatar/config', body);
+                showToast('配置已保存', 'success');
+            } catch (e) { showToast('保存失败：' + e.message, 'error'); }
+        }
+
+        function addBubble(text, isUser) {
+            const div = document.createElement('div');
+            div.className = 'chat-bubble ' + (isUser ? 'user' : 'assistant');
+            div.textContent = text;
+            $('#avatar-chat').appendChild(div);
+            $('#avatar-chat').scrollTop = $('#avatar-chat').scrollHeight;
+        }
+
+        async function sendChat() {
+            const content = $('#avatar-input').value.trim();
+            if (!content) return;
+            addBubble(content, true);
+            $('#avatar-input').value = '';
+            try {
+                const res = await api.post('/avatar/chat', { content });
+                addBubble(res.data.reply, false);
+            } catch (e) {
+                addBubble('[错误] ' + e.message, false);
+            }
+        }
+
+        async function startFocus() {
+            const durationMinutes = Number($('#focus-min').value) || 25;
+            const courseId = $('#focus-course').value ? Number($('#focus-course').value) : undefined;
+            try {
+                const res = await api.post('/focus-sessions', { durationMinutes, courseId });
+                focusSession = res.data;
+                focusSeconds = 0;
+                focusStartTime = Date.now();
+                $('#btn-focus-start').classList.add('hidden');
+                $('#btn-focus-end').classList.remove('hidden');
+                focusTimer = setInterval(() => {
+                    focusSeconds = Math.floor((Date.now() - focusStartTime) / 1000);
+                    $('#focus-info').textContent = '⏳ 专注进行中 ' + Math.floor(focusSeconds / 60) + '分' + (focusSeconds % 60) + '秒 （#会话' + focusSession.id + '）';
+                }, 1000);
+                showToast('专注开始！请保持学习状态', 'success');
+            } catch (e) { showToast('启动失败：' + e.message, 'error'); }
+        }
+
+        async function endFocus() {
+            if (!focusSession) return;
+            const minutes = Math.max(1, Math.round(focusSeconds / 60));
+            clearInterval(focusTimer);
+            try {
+                const res = await api.put(`/focus-sessions/${focusSession.id}/end?frontendMinutes=${minutes}`);
+                $('#btn-focus-start').classList.remove('hidden');
+                $('#btn-focus-end').classList.add('hidden');
+                $('#focus-info').textContent = `✅ 已结束专注于 ${plan(res.data)}，本次 ${minutes} 分钟。很棒的坚持！`;
+                focusSession = null;
+                showToast('专注已结束', 'success');
+            } catch (e) {
+                showToast('结束失败：' + e.message, 'error');
+                $('#btn-focus-end').classList.add('hidden');
+                $('#btn-focus-start').classList.remove('hidden');
+            }
+        }
+
+        function plan(d) { return d.status || '会话'; }
+    </script>
+</body>
+</html>

@@ -11,6 +11,21 @@ const auth = {
         localStorage.setItem('ai_tutor_auth_expire', String(Date.now() + CONFIG.TOKEN_EXPIRE));
     },
 
+    // 保存用户摘要（昵称/角色/email/userId），供导航栏显示
+    setUser(user) {
+        localStorage.setItem('ai_tutor_user', JSON.stringify(user || {}));
+    },
+    getUser() {
+        try {
+            return JSON.parse(localStorage.getItem('ai_tutor_user') || '{}');
+        } catch (e) {
+            return {};
+        }
+    },
+    hasRole(role) {
+        return this.getUser().role === role;
+    },
+
     // 是否已登录
     isLoggedIn() {
         const token = this.getToken();
@@ -27,6 +42,7 @@ const auth = {
     logout() {
         localStorage.removeItem(CONFIG.TOKEN_KEY);
         localStorage.removeItem('ai_tutor_auth_expire');
+        localStorage.removeItem('ai_tutor_user');
     },
 
     // 未登录则跳转登录页

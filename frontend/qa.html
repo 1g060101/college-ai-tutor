@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 答疑 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">💬 AI 智能答疑</h1>
+        <p class="page-desc">创建会话 → 提问 → 打开烧脑模式，AI 以「思路 → 分级提示 → 总结」三阶段引导式作答，chunk 逐字流式渲染。</p>
+
+        <div class="card mb-lg">
+            <div class="card-title">📝 新建会话</div>
+            <div class="grid-3">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>会话标题</label>
+                    <input type="text" class="form-control" id="session-title" placeholder="例如：极限求解专项"></div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>回复模式</label>
+                    <select class="form-control" id="session-mode">
+                        <option value="GUIDED">引导式（GUIDED）</option>
+                        <option value="DIRECT">直接式（DIRECT）</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>关联课程（可选）</label>
+                    <select class="form-control" id="session-course"><option value="">不关联</option></select>
+                </div>
+            </div>
+            <div class="mt-md flex">
+                <button class="btn btn-primary" id="btn-create-session">创建会话</button>
+                <button class="btn btn-success" id="btn-new-session" style="display:none;">创建新会话</button>
+                <span class="badge badge-success hidden" id="session-active-badge"></span>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <!-- 左侧：当前会话 + 提问 -->
+            <div>
+                <div class="card" style="min-height:480px; display:flex; flex-direction:column;">
+                    <div class="card-title flex justify-between">
+                        <span><span class="title-icon">🗨️</span>当前会话</span>
+                        <span class="text-muted hidden" id="session-meta"></span>
+                    </div>
+
+                    <div id="chat-area" style="flex:1; overflow-y:auto; max-height:52vh;">
+                        <div class="alert alert-info" id="chat-empty">请先创建会话，然后输入你的问题开始答疑。</div>
+                    </div>
+
+                    <div class="mt-md hidden" id="ask-box">
+                        <textarea class="form-control" id="ask-input" rows="2" placeholder="输入你的问题，例如：求极限 lim(x→0) (sinx)/x 怎么做？"></textarea>
+                        <div class="mt-sm flex">
+                            <button class="btn btn-primary" id="btn-ask">发送提问</button>
+                            <button class="btn btn-outline-muted hidden" id="btn-stop">停止</button>
+                            <span class="text-muted" id="stream-status" style="font-size:12px;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：会话记录 / 摘要 -->
+            <div>
+                <div class="card mb-lg">
+                    <div class="card-title">🧾 会话记录</div>
+                    <div id="turns-list">
+                        <div class="text-muted">暂无已保存的对话轮次记录。</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">📄 转写文本 / 最终答案</div>
+                    <div id="transcript-box" class="text-muted">发送问题后，完整答案会在这里沉淀，方便复制。</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('qa.html');
+
+        let currentSession = null;   // {id,title,mode}
+        let streaming = false;
+        let abortController = null;
+        let streamChunkCount = 0;
+        let finished = false;
+        let turnCards = [];           // 保存每轮 {turnId, qEl, aEl(assistant bubble), transcriptAcc}
+
+        loadCourses();
+
+        initSessionButton();
+
+        document.getElementById('btn-create-session').addEventListener('click', createSession);
+        document.getElementById('btn-new-session').addEventListener('click', () => {
+            $('#session-title').value = '';
+            showNewSessionForm(true);
+        });
+        document.getElementById('btn-ask').addEventListener('click', askQuestion);
+        document.getElementById('btn-stop').addEventListener('click', stopStreaming);
+
+        function initSessionButton() {
+            // 若页面刷新前未保留数据则显示创建按钮
+        }
+
+        function showNewSessionForm(show) {
+            $('#btn-create-session').style.display = show ? '' : 'none';
+            $('#btn-new-session').style.display = show ? 'none' : '';
+        }
+
+        async function loadCourses() {
+            try {
+                const res = await api.get('/courses?pageNum=1&pageSize=100');
+                const list = res.data.list || [];
+                $('#session-course').innerHTML = '<option value="">不关联</option>' +
+                    list.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+                return list;
+            } catch (e) {
+                return [];
+            }
+        }
+
+        async function createSession() {
+            const title = $('#session-title').value.trim() || '未命名答疑';
+            const courseId = $('#session-course').value ? Number($('#session-course').value) : undefined;
+            const replyMode = $('#session-mode').value;
+            try {
+                const res = await api.post('/qa/sessions', { title, courseId, replyMode });
+                const s = res.data;
+                currentSession = { id: s.id, title: s.title, mode: s.replyMode };
+                showNewSessionForm(false);
+                $('#session-active-badge').classList.remove('hidden');
+                $('#session-active-badge').textContent = `会话 #${s.id} · ${s.title}`;
+                $('#session-meta').classList.remove('hidden');
+                $('#session-meta').textContent = `模式：${s.replyMode}`;
+                $('#ask-box').classList.remove('hidden');
+                $('#chat-empty').classList.add('hidden');
+                turnCards = [];
+                $('#turns-list').innerHTML = '<div class="text-muted">本轮会话暂无保存记录。</div>';
+                $('#transcript-box').textContent = '· 会话已建立，等待提问 ·';
+                showToast('会话已创建', 'success');
+            } catch (e) {
+                showToast('创建会话失败：' + e.message, 'error');
+            }
+        }
+
+        async function askQuestion() {
+            const q = $('#ask-input').value.trim();
+            if (!currentSession) { showToast('请先创建会话', 'warning'); return; }
+            if (!q) { showToast('请输入问题', 'warning'); return; }
+            if (streaming) { showToast('正在生成中…', 'warning'); return; }
+
+            // 追加用户问题气泡
+            appendTurns(q);
+            $('#ask-input').value = '';
+
+            streaming = true;
+            streamChunkCount = 0;
+            finished = false;
+            $('#btn-ask').disabled = true;
+            $('#btn-stop').classList.remove('hidden');
+            $('#stream-status').textContent = '思考中…';
+
+            const card = turnCards[turnCards.length - 1];
+            const aEl = card.aEl;
+
+            try {
+                await ssePost(`/qa/sessions/${currentSession.id}/ask`, { question: q }, {
+                    onChunk(text) {
+                        streamChunkCount++;
+                        card.transcriptAcc += text;
+                        aEl.textContent = card.transcriptAcc;
+                        aEl.classList.add('cursor-blink');
+                        $('#stream-status').textContent = `正在输入… 已收到 ${streamChunkCount} 个片段`;
+                        scrollChat();
+                    },
+                    onGuidedCorrected(text) {
+                        // 引导式二次校验后重写：若与主要文本不同则追加提示
+                        if (text && text !== card.transcriptAcc.slice(0)) {
+                            const note = document.createElement('div');
+                            note.className = 'chat-meta';
+                            note.textContent = '🤖 AI 检测到直接给答案倾向，已引导修正';
+                            note.style.color = '#d97706';
+                            aEl.parentNode.insertBefore(note, aEl.nextSibling);
+                        }
+                    },
+                    onDone(data) {
+                        streaming = false;
+                        finished = true;
+                        card.turnId = data.turnId || null;
+                        aEl.classList.remove('cursor-blink');
+                        window.__qa_stats = { chunks: streamChunkCount, done: true };
+                        const status = `完成 · 共 ${streamChunkCount} 个片段`; 
+                        finalState(aEl, status, true);
+                        // 渲染三阶段框 + 反馈按钮
+                        renderStages(aEl, card.transcriptAcc);
+                        renderFeedback(card);
+                        saveTurnToRecord(card);
+                        $('#transcript-box').textContent = card.transcriptAcc;
+                    },
+                    onError(msg) {
+                        streaming = false;
+                        aEl.classList.remove('cursor-blink');
+                        aEl.textContent = (aEl.textContent || '') + '\n\n[错误] ' + msg;
+                        finalState(aEl, '出错', false);
+                    }
+                });
+            } catch (e) {
+                streaming = false;
+                aEl.classList.remove('cursor-blink');
+                if (finished) {
+                    // 已正常收到 done，仅余连接末尾的良性网络错误，忽略
+                    finalState(aEl, '完成 · 共 ' + streamChunkCount + ' 个片段', false);
+                } else {
+                    finalState(aEl, '请求失败', false);
+                    if (e.message !== '未登录') showToast('提问失败：' + e.message, 'error');
+                }
+            }
+        }
+
+        function finalState(aEl, statusText, allowToastSuffix) {
+            $('#stream-status').textContent = statusText;
+            $('#btn-ask').disabled = false;
+            $('#btn-stop').classList.add('hidden');
+        }
+
+        function stopStreaming() {
+            streaming = false;
+            const card = turnCards[turnCards.length - 1];
+            if (card) card.aEl.classList.remove('cursor-blink');
+            $('#stream-status').textContent = '已手动停止';
+            $('#btn-ask').disabled = false;
+            $('#btn-stop').classList.add('hidden');
+            // 停止流：关闭 reader 以中断读取
+            if (abortController) abortController.abort();
+        }
+
+        // 渲染三阶段解答：思路 / 分级提示 / 总结
+        function renderStages(aEl, text) {
+            // 移除原气泡纯文本形式，改为结构化卡片（原气泡内容保留在副本 div）
+            const container = document.createElement('div');
+            container.className = 'stages mt-sm';
+            const parseStages = splitStages(text);
+            const icons = { '思路': '🧠', '分级提示': '🎯', '总结': '✅' };
+            parseStages.forEach(st => {
+                const box = document.createElement('div');
+                box.className = 'chat-bubble assistant';
+                box.style.marginRight = '4px';
+                box.style.marginLeft = '0';
+                box.style.background = '#ffffff';
+                box.innerHTML = `<div style="font-weight:600; margin-bottom:6px;">${icons[st.title] || '📌'} ${esc(st.title)}</div><div style="white-space:pre-wrap;">${esc(st.content)}</div>`;
+                container.appendChild(box);
+            });
+            aEl.parentNode.insertBefore(container, aEl.nextSibling);
+            aEl.innerHTML = ''; // 清空原纯文本气泡内容
+            aEl.classList.add('hidden');
+            container.dataset.stages = '1';
+        }
+
+        function splitStages(text) {
+            // 按 【思路】【分级提示】【总结】 分段
+            const tokens = [];
+            const sections = [];
+            let last = null;
+            let re = /【([^】]+)】/g, m;
+            while ((m = re.exec(text))) {
+                sections.push({ title: m[1], index: m.index });
+            }
+            sections.push({ title: '', index: text.length });
+            for (let i = 0; i < sections.length - 1; i++) {
+                const title = sections[i].title;
+                const start = sections[i].index + title.length + 2 + 1; // 调整：跳过全角括号
+                tokens.push({
+                    title: title || '',
+                    content: text.slice(sections[i].index, sections[i + 1].index).replace(/^【[^】]*】/, '').trim()
+                });
+            }
+            return tokens;
+        }
+
+        function renderFeedback(card) {
+            if (!card.fbEl) return;
+            card.fbEl.innerHTML = `
+                <span style="font-size:12px; color:var(--text-secondary);">本次解答是否帮助到你？</span>
+                <button class="btn btn-sm btn-success" data-fb="1">帮助很大</button>
+                <button class="btn btn-sm btn-outline-muted" data-fb="2">一般</button>
+                <button class="btn btn-sm btn-danger" data-fb="0">没帮助</button>
+                <span class="fb-result text-muted"></span>`;
+            card.fbEl.querySelectorAll('button[data-fb]').forEach(b => b.addEventListener('click', () => submitFeedback(card, b.dataset.fb)));
+        }
+
+        async function submitFeedback(card, val) {
+            if (!card.turnId || !currentSession) return;
+            const helpful = val === '1';
+            const correct = val !== '0';
+            try {
+                await api.post(`/qa/sessions/${currentSession.id}/feedback`, {
+                    turnId: card.turnId,
+                    feedback: val === '1' ? '有帮助' : val === '0' ? '无帮助' : '一般',
+                    helpful, correct
+                });
+                const span = card.fbEl.querySelector('.fb-result');
+                span.textContent = '✔ 已记录反馈';
+                span.style.color = '#047857';
+                card.fbEl.querySelectorAll('button[data-fb]').forEach(b => b.disabled = true);
+            } catch (e) {
+                showToast('反馈失败：' + e.message, 'error');
+            }
+        }
+
+        function saveTurnToRecord(card) {
+            const list = $('#turns-list');
+            if (turnCards.length === 1) list.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'session-item';
+            div.style.cursor = 'default';
+            div.innerHTML = `<div><strong>Q：</strong>${esc(card.qText)}</div>
+                <div class="text-muted mt-sm" style="font-size:13px;">A：${esc(card.transcriptAcc.slice(0, 60))}${card.transcriptAcc.length > 60 ? '…' : ''}</div>`;
+            list.appendChild(div);
+        }
+
+        function appendTurns(qText) {
+            const area = $('#chat-area');
+            const wrap = document.createElement('div');
+            wrap.className = 'chat-turn';
+
+            const qBubble = document.createElement('div');
+            qBubble.className = 'chat-bubble user';
+            qBubble.textContent = qText;
+
+            const aBubble = document.createElement('div');
+            aBubble.className = 'chat-bubble assistant';
+            aBubble.textContent = '';
+
+            const fbEl = document.createElement('div');
+            fbEl.className = 'chat-meta';
+
+            wrap.appendChild(qBubble);
+            wrap.appendChild(aBubble);
+            wrap.appendChild(fbEl);
+            area.appendChild(wrap);
+
+            turnCards.push({ turnId: null, qText, aEl: aBubble, fbEl, transcriptAcc: '' });
+            scrollChat();
+        }
+
+        function scrollChat() {
+            const area = $('#chat-area');
+            area.scrollTop = area.scrollHeight;
+        }
+    </script>
+</body>
+</html>

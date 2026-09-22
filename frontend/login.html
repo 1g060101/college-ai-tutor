@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+    <style>
+        body { padding-top: 0; }
+    </style>
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <h2>🎓 AI 数字人学习助手</h2>
+            <p class="auth-sub">大学生辅助学习的智能伴学系统</p>
+
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="login">登录</button>
+                <button class="tab-btn" data-tab="register">注册</button>
+            </div>
+
+            <!-- 登录 -->
+            <form id="login-form">
+                <div class="form-group">
+                    <label>邮箱</label>
+                    <input type="email" class="form-control" id="login-email" required placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" class="form-control" id="login-password" required placeholder="请输入密码">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%">登 录</button>
+            </form>
+
+            <!-- 注册 -->
+            <form id="register-form" class="hidden">
+                <div class="form-group">
+                    <label>邮箱</label>
+                    <input type="email" class="form-control" id="reg-email" required placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" class="form-control" id="reg-password" required minlength="6" placeholder="至少 6 位">
+                </div>
+                <div class="form-group">
+                    <label>昵称</label>
+                    <input type="text" class="form-control" id="reg-nickname" placeholder="给自己取个昵称">
+                </div>
+                <div class="form-group">
+                    <label>角色</label>
+                    <select class="form-control" id="reg-role">
+                        <option value="STUDENT">学生</option>
+                        <option value="TEACHER">教师</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%">注 册</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        // 已登录直接跳首页
+        if (auth.isLoggedIn()) window.location.href = 'index.html';
+
+        // 登录/注册 tab 切换
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            $('#login-form').classList.toggle('hidden', tab !== 'login');
+            $('#register-form').classList.toggle('hidden', tab !== 'register');
+        }
+        $all('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+        function saveAuth(data, email) {
+            auth.setToken(data.data.token);
+            auth.setUser({ userId: data.data.userId, email: data.data.email, nickname: data.data.nickname || email, role: data.data.role });
+        }
+
+        $('#login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            try {
+                const res = await api.post('/auth/login', {
+                    email: $('#login-email').value.trim(),
+                    password: $('#login-password').value
+                });
+                saveAuth(res, $('#login-email').value.trim());
+                showToast('登录成功', 'success');
+                setTimeout(() => window.location.href = 'index.html', 400);
+            } catch (err) {
+                showToast('登录失败：' + err.message, 'error');
+                btn.disabled = false;
+            }
+        });
+
+        $('#register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            try {
+                const res = await api.post('/auth/register', {
+                    email: $('#reg-email').value.trim(),
+                    password: $('#reg-password').value,
+                    nickname: $('#reg-nickname').value.trim(),
+                    role: $('#reg-role').value
+                });
+                saveAuth(res, $('#reg-email').value.trim());
+                showToast('注册成功，已自动登录', 'success');
+                setTimeout(() => window.location.href = 'index.html', 500);
+            } catch (err) {
+                showToast('注册失败：' + err.message, 'error');
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

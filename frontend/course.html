@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课程 - AI 数字人学习助手</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div class="navbar"></div>
+    <div class="app">
+        <h1 class="page-title">📚 课程知识导学</h1>
+        <p class="page-desc">浏览课程列表，选中课程查看学习路径与知识点，并可请求 AI 口语化讲解。</p>
+
+        <div class="grid-2">
+            <div>
+                <div class="card mb-lg">
+                    <div class="card-title">课程列表</div>
+                    <div id="course-list-wrap" class="table-wrap"><div class="text-muted" style="padding:12px;">加载中…</div></div>
+                    <div class="flex justify-between mt-md">
+                        <button class="btn btn-sm btn-outline-muted" id="btn-prev">&lt; 上一页</button>
+                        <span class="text-muted" id="course-page-info"></span>
+                        <button class="btn btn-sm btn-outline-muted" id="btn-next">下一页 &gt;</button>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div class="card mb-lg">
+                    <div class="card-title">🗺️ 学习路径</div>
+                    <div id="path-box"><div class="text-muted">请从左侧选择一门课程。</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">🧩 知识点详情 / AI 讲解</div>
+                    <div id="kp-box"><div class="text-muted">选择路径中的知识点查看详情。</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script src="src/js/auth.js"></script>
+    <script src="src/js/nav.js"></script>
+    <script>
+        auth.requireLogin();
+        renderNav('course.html');
+
+        let pageNum = 1, pageSize = 10, totalPages = 1;
+        let selectedCourse = null;
+        let selectedKp = null;
+
+        loadCourses();
+
+        document.getElementById('btn-prev').addEventListener('click', () => { if (pageNum > 1) { pageNum--; loadCourses(); } });
+        document.getElementById('btn-next').addEventListener('click', () => { if (pageNum < totalPages) { pageNum++; loadCourses(); } });
+
+        async function loadCourses() {
+            try {
+                const res = await api.get(`/courses?pageNum=${pageNum}&pageSize=${pageSize}`);
+                const d = res.data;
+                totalPages = d.totalPages || 1;
+                $('#course-page-info').textContent = `共 ${d.total} 门，第 ${d.pageNum}/${totalPages} 页`;
+                const list = d.list || [];
+                if (!list.length) { $('#course-list-wrap').innerHTML = '<div class="text-muted" style="padding:12px;">暂无课程</div>'; return; }
+                $('#course-list-wrap').innerHTML = `
+                    <table class="table">
+                        <thead><tr><th>课程</th><th>学科</th><th>难度</th><th></th></tr></thead>
+                        <tbody>${list.map(c => `
+                            <tr style="cursor:pointer;" data-id="${c.id}">
+                                <td><strong>${esc(c.name)}</strong></td>
+                                <td>${esc(c.subject)}</td>
+                                <td>${difficultyBadge(c.difficulty)}</td>
+                                <td><button class="btn btn-sm btn-outline view-path" data-id="${c.id}">学习路径</button></td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>`;
+                $all('tr[data-id]').forEach(r => r.addEventListener('click', () => selectCourse(Number(r.dataset.id))));
+            } catch (e) { $('#course-list-wrap').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+
+        async function selectCourse(id) {
+            try {
+                const res = await api.get(`/courses/${id}/path`);
+                const path = res.data;
+                selectedCourse = path;
+                $('#path-box').innerHTML = `<div class="kv"><span class="k">课程</span><span class="v">${esc(path.name)}</span></div>
+                    <div class="mt-sm flex" style="gap:8px;">一级知识点：</div>
+                    <div class="mt-sm">${(path.nodes || []).map(n => `
+                        <button class="btn btn-sm btn-outline kp-node" data-id="${n.id}" style="margin:4px;"><span>${esc(n.name)}</span></button>`).join('') || '<div class="text-muted">暂无知识点</div>'}</div>`;
+                $all('.kp-node').forEach(b => b.addEventListener('click', () => loadKp(Number(b.dataset.id))));
+                if (path.nodes && path.nodes.length) loadKp(path.nodes[0].id);
+            } catch (e) { $('#path-box').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+
+        async function loadKp(kpId) {
+            selectedKp = kpId;
+            try {
+                const res = await api.get(`/knowledge-points/${kpId}`);
+                const kp = res.data;
+                $('#kp-box').innerHTML = `
+                    <div class="kv"><span class="k">知识点</span><span class="v"><strong>${esc(kp.name)}</strong></span></div>
+                    <div class="kv"><span class="k">难度</span><span class="v">${difficultyBadge(kp.difficulty)}</span></div>
+                    <div class="kv"><span class="k">权重</span><span class="v">${kp.weight}</span></div>
+                    <div class="kv"><span class="k">标签</span><span class="v">${esc(kp.tags || '-')}</span></div>
+                    <div class="kv" style="align-items:flex-start;"><span class="k">描述</span><span class="v">${esc(kp.description || '-')}</span></div>
+                    <div class="mt-md"><button class="btn btn-primary" id="btn-explain">✨ AI 口语化讲解</button></div>
+                    <div id="explain-box" class="mt-md text-muted"></div>`;
+                document.getElementById('btn-explain').addEventListener('click', () => explainKp(kpId));
+            } catch (e) { $('#kp-box').innerHTML = '<div class="alert alert-danger">加载失败：' + esc(e.message) + '</div>'; }
+        }
+
+        async function explainKp(kpId) {
+            const box = document.getElementById('explain-box');
+            box.innerHTML = '🧠 正在生成讲解…';
+            try {
+                const res = await api.get(`/knowledge-points/${kpId}/explain`);
+                box.innerHTML = `<div class="chat-bubble assistant">${esc(res.data.text)}</div>`;
+            } catch (e) { box.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>'; }
+        }
+    </script>
+</body>
+</html>
