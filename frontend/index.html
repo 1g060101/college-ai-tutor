@@ -94,7 +94,7 @@
                 items.forEach(([k, v]) => { html += `<span style="margin-right:20px;"><strong>${esc(k)}</strong>：${esc(v)}</span>`; });
                 document.getElementById('summary-box').querySelector('.text-muted').innerHTML = html;
             }).catch(() => {
-                document.getElementById('summary-box').querySelector('.text-muted').textContent = '加载失败，请确认后端服务已启动。';
+                document.getElementById('summary-box').querySelector('.text-muted').textContent = '学习汇总暂不可用，可稍后重试。';
             });
         }
     </script>

@@ -13,7 +13,10 @@ async function request(url, options = {}) {
 
     if (response.status === 401) {
         localStorage.removeItem(CONFIG.TOKEN_KEY);
-        window.location.href = '/index.html';
+        // 若已在首页，避免整页重载打断在途请求（否则控制台会报 ERR_ABORTED）
+        if (window.location.pathname !== '/index.html' && window.location.pathname !== '/') {
+            window.location.href = '/index.html';
+        }
         return;
     }
 
