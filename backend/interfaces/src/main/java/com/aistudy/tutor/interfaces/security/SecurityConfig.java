@@ -1,5 +1,6 @@
 package com.aistudy.tutor.interfaces.security;
 
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,10 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // SSE/异步长连接在 Controller 返回 SseEmitter 后会再次进入 ASYNC/ERROR dispatch；
+                        // 此时响应已 committed，若再次鉴权会抛 AccessDenied 且无法回退，
+                        // 导致 Chunked 响应结尾被截断（浏览器报 ERR_INCOMPLETE_CHUNKED_ENCODING），故放行。
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/api/v1/health", "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

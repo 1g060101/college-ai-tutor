@@ -154,37 +154,44 @@ public class QaAppService {
                 ? GUIDANCE_POLICY.directSystemPrompt() : GUIDANCE_POLICY.guidedSystemPrompt();
         List<Map<String, String>> messages = buildMessages(sessionId, question);
         StringBuilder buffer = new StringBuilder();
+        // 同一 emitter 上的 send/complete 必须串行：Mock 网关可能在独立线程回调 onChunk/onDone，
+        // 并发写 SseEmitter 会导致 chunked 结尾偶发截断（ERR_INCOMPLETE_CHUNKED_ENCODING）。
+        final Object lock = new Object();
         try {
             aiCallFacade.chatStream(userId, system, messages, 0.7,
                     // onChunk：累积片段并推送给前端
                     chunk -> {
                         buffer.append(chunk);
                         try {
-                            emitter.send(SseEmitter.event().name("chunk").data(chunk));
+                            synchronized (lock) {
+                                emitter.send(SseEmitter.event().name("chunk").data(chunk));
+                            }
                         } catch (IOException e) {
                             log.warn("SSE 推送 chunk 失败: {}", e.getMessage());
                         }
                     },
                     // onDone：拿到完整回复后做引导式校验、保存轮次、推送 done 事件
                     result -> {
-                        try {
-                            String content = result.content();
-                            String answer = content;
-                            if (session.getReplyMode() == ReplyMode.GUIDED) {
-                                answer = applyGuidedGuard(userId, content, emitter);
+                        synchronized (lock) {
+                            try {
+                                String content = result.content();
+                                String answer = content;
+                                if (session.getReplyMode() == ReplyMode.GUIDED) {
+                                    answer = applyGuidedGuard(userId, content, emitter);
+                                }
+                                String guidanceLevel = extractGuidanceLevel(answer);
+                                QaTurn turn = saveTurn(userId, sessionId, question, answer, kpHit, guidanceLevel, replyModeName);
+                                Map<String, Object> doneData = new LinkedHashMap<>();
+                                doneData.put("turnId", turn.getId());
+                                doneData.put("kpHit", kpHit);
+                                doneData.put("guidanceLevel", guidanceLevel);
+                                doneData.put("replyMode", replyModeName);
+                                emitter.send(SseEmitter.event().name("done").data(objectMapper.writeValueAsString(doneData)));
+                                emitter.complete();
+                            } catch (Exception e) {
+                                log.error("答疑流式处理异常 sessionId={}", sessionId, e);
+                                sendError(emitter, e.getMessage());
                             }
-                            String guidanceLevel = extractGuidanceLevel(answer);
-                            QaTurn turn = saveTurn(userId, sessionId, question, answer, kpHit, guidanceLevel, replyModeName);
-                            Map<String, Object> doneData = new LinkedHashMap<>();
-                            doneData.put("turnId", turn.getId());
-                            doneData.put("kpHit", kpHit);
-                            doneData.put("guidanceLevel", guidanceLevel);
-                            doneData.put("replyMode", replyModeName);
-                            emitter.send(SseEmitter.event().name("done").data(objectMapper.writeValueAsString(doneData)));
-                            emitter.complete();
-                        } catch (Exception e) {
-                            log.error("答疑流式处理异常 sessionId={}", sessionId, e);
-                            sendError(emitter, e.getMessage());
                         }
                     });
         } catch (Exception e) {
