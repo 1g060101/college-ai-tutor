@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/ai_tutor?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
-    password: 061001
+    password: "061001"
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
