@@ -59,10 +59,26 @@ public class MockAiGateway implements AiGateway {
             content = GUIDED_CORRECTED_REPLY;
         } else if (system != null && system.contains("直接讲解模式")) {
             content = DIRECT_REPLY;
+        } else if (system != null && system.contains("数字人学习陪伴")) {
+            // 陪伴场景：按用户输入产出贴合的陪伴式回复（共情/拆解），体现差异化，避免答疑三段式
+            content = companionReply(userContent);
         } else {
             content = GUIDED_REPLY;
         }
         return new AiCallResult(UUID.randomUUID().toString(), "mock", 50, 200, content);
+    }
+
+    /**
+     * Mock 陪伴回复：针对不同输入产出不同、贴近内容的陪伴式文本。
+     * 情绪类先共情安抚，学习类先引导拆解；均不含「思路/分级提示/总结」三段式。
+     */
+    private String companionReply(String userContent) {
+        String snippet = userContent.length() > 16 ? userContent.substring(0, 16) + "…" : userContent;
+        boolean emotional = userContent.matches(".*(累|焦虑|压力|难过|泪|烦|迷茫|困|紧张|想放松|疲惫|哭).*");
+        if (emotional) {
+            return "抱抱你～面对「" + snippet + "」，先别硬扛。深呼吸喝口水，把眼下最要紧的一件事列出来，完成它就给自己一个小奖励。我就在旁边陪着，不急，慢慢来。";
+        }
+        return "关于「" + snippet + "」，我们慢慢地来：先把它拆成几个小问题，我一步一步陪你对清楚。你先说说哪里最不确定？我们从那里开始。";
     }
 
     @Override

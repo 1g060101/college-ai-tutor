@@ -2,7 +2,6 @@ package com.aistudy.tutor.interfaces.controller;
 
 import com.aistudy.tutor.application.avatar.AvatarAppService;
 import com.aistudy.tutor.domain.avatar.model.AvatarConfig;
-import com.aistudy.tutor.domain.qa.model.QaTurn;
 import com.aistudy.tutor.interfaces.dto.avatar.AvatarChatRequest;
 import com.aistudy.tutor.interfaces.dto.avatar.AvatarChatResponse;
 import com.aistudy.tutor.interfaces.dto.avatar.AvatarConfigRequest;
@@ -43,11 +42,11 @@ public class AvatarController {
         return Result.success(toConfigResponse(config));
     }
 
-    /** 陪伴对话：复用答疑会话同步答疑，返回 AI 回复与会话 id */
+    /** 陪伴对话：按数字人形象配置生成个性化回复 */
     @PostMapping("/chat")
     public Result<AvatarChatResponse> chat(@Valid @RequestBody AvatarChatRequest request) {
-        QaTurn turn = avatarAppService.chat(SecurityUtils.currentUserId(), request.getCourseId(), request.getContent());
-        return Result.success(new AvatarChatResponse(turn.getAnswer(), turn.getSessionId()));
+        String reply = avatarAppService.chat(SecurityUtils.currentUserId(), request.getCourseId(), request.getContent());
+        return Result.success(new AvatarChatResponse(reply, null));
     }
 
     private AvatarConfigResponse toConfigResponse(AvatarConfig config) {

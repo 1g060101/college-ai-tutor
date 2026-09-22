@@ -1,21 +1,22 @@
 package com.aistudy.tutor.application.avatar;
 
-import com.aistudy.tutor.application.qa.QaAppService;
+import com.aistudy.tutor.domain.ai.AiCallResult;
 import com.aistudy.tutor.domain.avatar.model.AvatarChat;
 import com.aistudy.tutor.domain.avatar.model.AvatarConfig;
 import com.aistudy.tutor.domain.avatar.model.FocusSession;
 import com.aistudy.tutor.domain.avatar.repository.AvatarChatRepository;
 import com.aistudy.tutor.domain.avatar.repository.AvatarConfigRepository;
 import com.aistudy.tutor.domain.avatar.repository.FocusSessionRepository;
-import com.aistudy.tutor.domain.qa.model.QaSession;
-import com.aistudy.tutor.domain.qa.model.QaTurn;
-import com.aistudy.tutor.domain.qa.model.ReplyMode;
+import com.aistudy.tutor.infrastructure.aigateway.AiCallFacade;
 import com.aistudy.tutor.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 数字人学习陪伴应用服务：形象配置 / 陪伴对话 / 专注计时。
@@ -29,10 +30,21 @@ public class AvatarAppService {
     private static final String DEFAULT_TONE = "FRIENDLY";
     private static final String DEFAULT_STYLE = "CONCISE";
 
+    /** 语气→人格描述 */
+    private static final Map<String, String> TONE_DESC = Map.of(
+            "FRIENDLY", "亲切友善",
+            "STRICT", "严谨细致",
+            "CASUAL", "轻松随性");
+    /** 风格→讲解风格描述 */
+    private static final Map<String, String> STYLE_DESC = Map.of(
+            "CONCISE", "言简意赅",
+            "DETAILED", "详尽充分",
+            "MOTIVATIONAL", "积极鼓励");
+
     private final AvatarConfigRepository avatarConfigRepository;
     private final FocusSessionRepository focusSessionRepository;
     private final AvatarChatRepository avatarChatRepository;
-    private final QaAppService qaAppService;
+    private final AiCallFacade aiCallFacade;
 
     /**
      * 获取当前用户数字人配置；无记录时返回默认配置（不落库）
@@ -62,17 +74,38 @@ public class AvatarAppService {
     }
 
     /**
-     * 陪伴对话：复用答疑会话（标题取内容前 20 字、引导式），同步答疑后
-     * 把 USER / AVATAR 两条记录写入 avatar_chat，返回答疑轮次
+     * 陪伴对话：按「数字人形象配置」构建陪伴人设，直接调用 AI 生成
+     * 契合语气/风格并有情感共鸣的回复，记录 USER / AVATAR 两条陪伴记录。返回 AI 回复文本。
      */
     @Transactional
-    public QaTurn chat(Long userId, Long courseId, String content) {
-        String title = content.length() > 20 ? content.substring(0, 20) : content;
-        QaSession session = qaAppService.createSession(userId, courseId, title, ReplyMode.GUIDED);
-        QaTurn turn = qaAppService.askSync(userId, session.getId(), content);
+    public String chat(Long userId, Long courseId, String content) {
+        AvatarConfig config = getConfig(userId);
+        String system = buildCompanionSystem(config);
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "user", "content", content));
+        AiCallResult res = aiCallFacade.chat(userId, system, messages, 0.9);
+        String reply = (res != null && res.content() != null && !res.content().isBlank())
+                ? res.content().trim() : "我在呢，你慢慢说～";
         avatarChatRepository.save(new AvatarChat(userId, "USER", content, null));
-        avatarChatRepository.save(new AvatarChat(userId, "AVATAR", turn.getAnswer(), null));
-        return turn;
+        avatarChatRepository.save(new AvatarChat(userId, "AVATAR", reply, null));
+        return reply;
+    }
+
+    /**
+     * 由形象配置构建陪伴人设 system prompt：语气 / 风格 / 音色代入，
+     * 并约定情感安抚与口语化表达，避免落入答疑三段式模板。
+     */
+    private String buildCompanionSystem(AvatarConfig config) {
+        String tone = TONE_DESC.getOrDefault(config.getTone(), "亲切友善");
+        String style = STYLE_DESC.getOrDefault(config.getStyle(), "自然随和");
+        String voice = (config.getVoice() == null || config.getVoice().isBlank())
+                ? "" : "\n你的音色：%s".formatted(config.getVoice());
+        return "你是数字人学习陪伴「%s」，说话%s、讲解%s。%s"
+                .formatted(config.getAvatarName(), tone, style, voice)
+                + "\n你的职责是陪伴大学生，要有温度、共情、口语化。"
+                + "\n规则：1) 当用户表达情绪（累、焦虑、想放松等）时，先共情安抚，再给轻松实用的小建议；"
+                + "2) 当用户问学习/题目时，用鼓励式口语讲清要点，\"严禁\"出现「思路、分级提示、总结（一）（二）（三）」这类答疑三段式；"
+                + "3) 回复简短自然、贴合人设，一般不超过150字。";
     }
 
     /**
