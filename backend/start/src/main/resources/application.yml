@@ -16,6 +16,12 @@ app:
     # 生产环境务必通过环境变量 APP_JWT_SECRET 覆盖
     secret: ${APP_JWT_SECRET:ai-tutor-dev-secret-key-please-change-in-prod-0123456789}
     expiration-ms: 604800000
+  ai:
+    deepseek:
+      # DeepSeek API Key 走环境变量 DEEPSEEK_API_KEY；未配置时自动回退到 MockAiGateway（不影响演示）
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      model: ${DEEPSEEK_MODEL:deepseek-chat}
 
 management:
   endpoints:
