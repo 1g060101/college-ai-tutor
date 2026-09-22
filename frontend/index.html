@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大学生辅助学习 AI 数字人系统</title>
+    <link rel="stylesheet" href="src/css/base.css">
+    <link rel="stylesheet" href="src/css/components.css">
+</head>
+<body>
+    <div id="app">
+        <h1>大学生辅助学习 AI 数字人系统</h1>
+        <p id="health-status">正在检查服务状态...</p>
+    </div>
+    <script src="src/config.js"></script>
+    <script src="src/js/api.js"></script>
+    <script>
+        // 页面加载时检查后端健康状态
+        (async () => {
+            try {
+                const data = await api.get('/health');
+                document.getElementById('health-status').textContent =
+                    '后端服务状态: ' + data.data.status;
+            } catch (e) {
+                document.getElementById('health-status').textContent =
+                    '后端连接失败: ' + e.message;
+            }
+        })();
+    </script>
+</body>
+</html>
