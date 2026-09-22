@@ -11,6 +11,12 @@ server:
   port: ${PORT:8080}
   address: 0.0.0.0
 
+app:
+  jwt:
+    # 生产环境务必通过环境变量 APP_JWT_SECRET 覆盖
+    secret: ${APP_JWT_SECRET:ai-tutor-dev-secret-key-please-change-in-prod-0123456789}
+    expiration-ms: 604800000
+
 management:
   endpoints:
     web:

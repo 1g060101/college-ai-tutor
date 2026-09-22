@@ -19,6 +19,11 @@
             <groupId>com.aistudy</groupId>
             <artifactId>domain</artifactId>
         </dependency>
+        <!-- infrastructure（统一限流审计门面 AiCallFacade，application 只依赖它而不触碰具体 AI 网关） -->
+        <dependency>
+            <groupId>com.aistudy</groupId>
+            <artifactId>infrastructure</artifactId>
+        </dependency>
         <!-- Spring 事务管理 -->
         <dependency>
             <groupId>org.springframework</groupId>
@@ -27,6 +32,27 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
+        </dependency>
+        <!-- Spring Web MVC（SSE 流式答疑 SseEmitter） -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+        </dependency>
+        <!-- servlet API（编译 SseEmitter 所需，运行时由 Web 容器提供） -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Jackson（SSE done 事件 JSON 序列化） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- 密码加密（BCrypt） -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
